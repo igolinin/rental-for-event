@@ -1,0 +1,315 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { generateRefCode, generateShortCode } from "@/lib/utils";
+import {
+  categorySchema,
+  subCategorySchema,
+  inventoryItemSchema,
+  serializedUnitSchema,
+  maintenanceLogSchema,
+} from "@/schemas/inventory";
+import { auth } from "@/lib/auth";
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+// ─── Categories ───────────────────────────────────────────────────────────────
+
+export async function createCategory(data: unknown) {
+  const parsed = categorySchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const { name, description, color, sortOrder } = parsed.data;
+  const slug = slugify(name);
+
+  await prisma.inventoryCategory.create({
+    data: { name, slug, description, color, sortOrder },
+  });
+
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/inventory/categories");
+  return { success: true };
+}
+
+export async function updateCategory(id: string, data: unknown) {
+  const parsed = categorySchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const { name, description, color, sortOrder } = parsed.data;
+
+  await prisma.inventoryCategory.update({
+    where: { id },
+    data: { name, slug: slugify(name), description, color, sortOrder },
+  });
+
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/inventory/categories");
+  return { success: true };
+}
+
+export async function deleteCategory(id: string) {
+  const count = await prisma.inventoryItem.count({ where: { categoryId: id } });
+  if (count > 0) {
+    return { error: "Cannot delete category with existing items." };
+  }
+
+  await prisma.inventorySubCategory.deleteMany({ where: { categoryId: id } });
+  await prisma.inventoryCategory.delete({ where: { id } });
+
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/inventory/categories");
+  return { success: true };
+}
+
+export async function createSubCategory(data: unknown) {
+  const parsed = subCategorySchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const { categoryId, name } = parsed.data;
+  const slug = slugify(name);
+
+  await prisma.inventorySubCategory.create({
+    data: { categoryId, name, slug },
+  });
+
+  revalidatePath("/dashboard/inventory/categories");
+  return { success: true };
+}
+
+export async function deleteSubCategory(id: string) {
+  const count = await prisma.inventoryItem.count({ where: { subCategoryId: id } });
+  if (count > 0) {
+    return { error: "Cannot delete sub-category with existing items." };
+  }
+  await prisma.inventorySubCategory.delete({ where: { id } });
+  revalidatePath("/dashboard/inventory/categories");
+  return { success: true };
+}
+
+// ─── Inventory Items ──────────────────────────────────────────────────────────
+
+export async function createInventoryItem(data: unknown) {
+  const parsed = inventoryItemSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const d = parsed.data;
+  const refCode = generateRefCode("INV");
+
+  const item = await prisma.inventoryItem.create({
+    data: {
+      refCode,
+      name: d.name,
+      description: d.description,
+      categoryId: d.categoryId,
+      subCategoryId: d.subCategoryId,
+      trackingMode: d.trackingMode,
+      totalQuantity: d.trackingMode === "BULK" ? d.totalQuantity : 0,
+      dailyRateAmount: d.dailyRateAmount,
+      dailyRateCurrency: d.dailyRateCurrency,
+      replacementCostAmount: d.replacementCostAmount,
+      replacementCostCurrency: d.replacementCostCurrency,
+      notes: d.notes,
+      isActive: d.isActive,
+    },
+  });
+
+  revalidatePath("/dashboard/inventory");
+  return { success: true, id: item.id };
+}
+
+export async function updateInventoryItem(id: string, data: unknown) {
+  const parsed = inventoryItemSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const d = parsed.data;
+
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: {
+      name: d.name,
+      description: d.description,
+      categoryId: d.categoryId,
+      subCategoryId: d.subCategoryId,
+      trackingMode: d.trackingMode,
+      totalQuantity: d.trackingMode === "BULK" ? d.totalQuantity : 0,
+      dailyRateAmount: d.dailyRateAmount,
+      dailyRateCurrency: d.dailyRateCurrency,
+      replacementCostAmount: d.replacementCostAmount,
+      replacementCostCurrency: d.replacementCostCurrency,
+      notes: d.notes,
+      isActive: d.isActive,
+    },
+  });
+
+  revalidatePath("/dashboard/inventory");
+  revalidatePath(`/dashboard/inventory/${id}`);
+  return { success: true };
+}
+
+export async function archiveInventoryItem(id: string) {
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  revalidatePath("/dashboard/inventory");
+  return { success: true };
+}
+
+// ─── Serialized Units ─────────────────────────────────────────────────────────
+
+export async function addSerializedUnit(inventoryItemId: string, data: unknown) {
+  const parsed = serializedUnitSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const d = parsed.data;
+
+  await prisma.serializedUnit.create({
+    data: {
+      inventoryItemId,
+      serialNumber: d.serialNumber,
+      assetTag: d.assetTag,
+      status: d.status,
+      purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
+      purchasePriceAmount: d.purchasePriceAmount,
+      purchasePriceCurrency: d.purchasePriceCurrency,
+      notes: d.notes,
+    },
+  });
+
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  return { success: true };
+}
+
+export async function updateSerializedUnit(
+  unitId: string,
+  inventoryItemId: string,
+  data: unknown
+) {
+  const parsed = serializedUnitSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const d = parsed.data;
+
+  await prisma.serializedUnit.update({
+    where: { id: unitId },
+    data: {
+      serialNumber: d.serialNumber,
+      assetTag: d.assetTag,
+      status: d.status,
+      purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
+      purchasePriceAmount: d.purchasePriceAmount,
+      purchasePriceCurrency: d.purchasePriceCurrency,
+      notes: d.notes,
+    },
+  });
+
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  return { success: true };
+}
+
+export async function deleteSerializedUnit(unitId: string, inventoryItemId: string) {
+  const allocations = await prisma.projectEquipmentAllocation.count({
+    where: { serializedUnitId: unitId },
+  });
+  if (allocations > 0) {
+    return { error: "Cannot delete unit that has project allocations." };
+  }
+
+  await prisma.serializedUnit.delete({ where: { id: unitId } });
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  return { success: true };
+}
+
+// ─── Maintenance Logs ─────────────────────────────────────────────────────────
+
+export async function createMaintenanceLog(data: unknown) {
+  const session = await auth();
+  if (!session?.user) return { error: "Not authenticated." };
+
+  const parsed = maintenanceLogSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const d = parsed.data;
+
+  await prisma.$transaction(async (tx) => {
+    const log = await tx.maintenanceLog.create({
+      data: {
+        inventoryItemId: d.inventoryItemId,
+        serializedUnitId: d.serializedUnitId,
+        type: d.type,
+        description: d.description,
+        status: d.status,
+        reportedAt: d.reportedAt ? new Date(d.reportedAt) : new Date(),
+        startedAt: d.startedAt ? new Date(d.startedAt) : null,
+        completedAt: d.completedAt ? new Date(d.completedAt) : null,
+        vendor: d.vendor,
+        technicianName: d.technicianName,
+        costAmount: d.costAmount,
+        costCurrency: d.costCurrency,
+        loggedById: session.user.id,
+        notes: d.notes,
+      },
+    });
+
+    // If a specific unit is flagged and log is open/in-progress, mark it IN_REPAIR
+    if (
+      log.serializedUnitId &&
+      (log.status === "OPEN" || log.status === "IN_PROGRESS")
+    ) {
+      await tx.serializedUnit.update({
+        where: { id: log.serializedUnitId },
+        data: { status: "IN_REPAIR" },
+      });
+    }
+  });
+
+  revalidatePath(`/dashboard/inventory/${d.inventoryItemId}`);
+  revalidatePath("/dashboard/maintenance");
+  return { success: true };
+}
+
+export async function updateMaintenanceLogStatus(
+  logId: string,
+  status: "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+) {
+  const session = await auth();
+  if (!session?.user) return { error: "Not authenticated." };
+
+  await prisma.$transaction(async (tx) => {
+    const log = await tx.maintenanceLog.update({
+      where: { id: logId },
+      data: {
+        status,
+        ...(status === "IN_PROGRESS" ? { startedAt: new Date() } : {}),
+        ...(status === "COMPLETED" || status === "CANCELLED"
+          ? { completedAt: new Date() }
+          : {}),
+      },
+    });
+
+    if (log.serializedUnitId) {
+      if (status === "COMPLETED" || status === "CANCELLED") {
+        await tx.serializedUnit.update({
+          where: { id: log.serializedUnitId },
+          data: { status: "AVAILABLE" },
+        });
+      } else if (status === "IN_PROGRESS" || status === "OPEN") {
+        await tx.serializedUnit.update({
+          where: { id: log.serializedUnitId },
+          data: { status: "IN_REPAIR" },
+        });
+      }
+    }
+  });
+
+  revalidatePath("/dashboard/maintenance");
+  revalidatePath("/dashboard/inventory");
+  return { success: true };
+}
