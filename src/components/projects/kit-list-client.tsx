@@ -49,9 +49,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { equipmentItemSchema, type EquipmentItemFormValues } from "@/schemas/projects";
-import { addEquipmentItem, removeEquipmentItem } from "@/server/actions/projects";
+import { addEquipmentItem, removeEquipmentItem, fetchSerializedUnitsForKitItem, updateEquipmentAllocation } from "@/server/actions/projects";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Tag } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { ProjectDetail } from "@/server/queries/projects";
 import type { ItemListEntry } from "@/server/queries/inventory";
 
@@ -71,6 +72,15 @@ function formatCents(cents: number | null | undefined, currency = "USD"): string
   }).format(cents / 100);
 }
 
+type SerializedUnit = {
+  id: string;
+  serialNumber: string;
+  assetTag: string | null;
+  status: string;
+  isAssignedToThisItem: boolean;
+  isAvailable: boolean;
+};
+
 export function KitListClient({
   projectId,
   equipmentItems,
@@ -80,6 +90,12 @@ export function KitListClient({
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [allocDialogOpen, setAllocDialogOpen] = useState(false);
+  const [allocKitItemId, setAllocKitItemId] = useState<string | null>(null);
+  const [allocUnits, setAllocUnits] = useState<SerializedUnit[]>([]);
+  const [allocSelected, setAllocSelected] = useState<Set<string>>(new Set());
+  const [allocLoading, setAllocLoading] = useState(false);
+  const [allocSaving, setAllocSaving] = useState(false);
 
   const form = useForm<EquipmentItemFormValues>({
     resolver: zodResolver(equipmentItemSchema),
@@ -122,6 +138,50 @@ export function KitListClient({
     router.refresh();
   }
 
+  async function openAllocDialog(kitItemId: string) {
+    setAllocKitItemId(kitItemId);
+    setAllocDialogOpen(true);
+    setAllocLoading(true);
+    try {
+      const result = await fetchSerializedUnitsForKitItem(kitItemId);
+      if ("error" in result) {
+        toast({ variant: "destructive", title: result.error });
+        setAllocDialogOpen(false);
+        return;
+      }
+      setAllocUnits(result.units);
+      setAllocSelected(new Set(result.units.filter((u) => u.isAssignedToThisItem).map((u) => u.id)));
+    } finally {
+      setAllocLoading(false);
+    }
+  }
+
+  async function saveAllocation() {
+    if (!allocKitItemId) return;
+    setAllocSaving(true);
+    try {
+      const result = await updateEquipmentAllocation(allocKitItemId, [...allocSelected], projectId);
+      if ("error" in result && result.error) {
+        toast({ variant: "destructive", title: String(result.error) });
+        return;
+      }
+      toast({ title: "Unit assignments saved" });
+      setAllocDialogOpen(false);
+      router.refresh();
+    } finally {
+      setAllocSaving(false);
+    }
+  }
+
+  function toggleUnit(id: string) {
+    setAllocSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const kitTotal = equipmentItems.reduce((sum, item) => {
     return sum + (item.unitRateAmount ?? 0) * item.rateDays * item.quantityNeeded;
   }, 0);
@@ -146,6 +206,7 @@ export function KitListClient({
               <TableHead>Rate type</TableHead>
               <TableHead className="text-right">Days</TableHead>
               <TableHead className="text-right">Line total</TableHead>
+              <TableHead>Units</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -179,6 +240,22 @@ export function KitListClient({
                   <TableCell className="text-right tabular-nums">{item.rateDays}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">
                     {formatCents(lineTotal, item.unitRateCurrency ?? projectCurrency)}
+                  </TableCell>
+                  <TableCell>
+                    {item.inventoryItem.trackingMode === "SERIALIZED" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        title="Assign specific units"
+                        onClick={() => openAllocDialog(item.id)}
+                      >
+                        <Tag className="h-3 w-3 mr-1" />
+                        {item.allocations.length > 0
+                          ? item.allocations.map((a) => a.serializedUnit.serialNumber).join(", ")
+                          : "Assign"}
+                      </Button>
+                    )}
                   </TableCell>
                   <TableCell>
                     <AlertDialog>
@@ -340,6 +417,59 @@ export function KitListClient({
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign serialized units dialog */}
+      <Dialog open={allocDialogOpen} onOpenChange={setAllocDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign units</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto space-y-2">
+            {allocLoading && <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>}
+            {!allocLoading && allocUnits.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 text-center">No serialized units found for this item.</p>
+            )}
+            {!allocLoading && allocUnits.map((unit) => (
+              <label
+                key={unit.id}
+                className={`flex items-center gap-3 rounded-md border p-3 cursor-pointer ${
+                  !unit.isAvailable && !unit.isAssignedToThisItem
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-slate-50"
+                }`}
+              >
+                <Checkbox
+                  checked={allocSelected.has(unit.id)}
+                  onCheckedChange={() => (unit.isAvailable || unit.isAssignedToThisItem) && toggleUnit(unit.id)}
+                  disabled={!unit.isAvailable && !unit.isAssignedToThisItem}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium font-mono">{unit.serialNumber}</p>
+                  {unit.assetTag && <p className="text-xs text-muted-foreground">{unit.assetTag}</p>}
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    unit.isAssignedToThisItem
+                      ? "bg-blue-50 text-blue-700 border-blue-200 text-xs"
+                      : unit.isAvailable
+                      ? "bg-green-50 text-green-700 border-green-200 text-xs"
+                      : "bg-red-50 text-red-600 border-red-200 text-xs"
+                  }
+                >
+                  {unit.isAssignedToThisItem ? "Assigned" : unit.isAvailable ? unit.status : "Unavailable"}
+                </Badge>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAllocDialogOpen(false)}>Cancel</Button>
+            <Button onClick={saveAllocation} disabled={allocSaving || allocLoading}>
+              {allocSaving ? "Saving…" : "Save assignments"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

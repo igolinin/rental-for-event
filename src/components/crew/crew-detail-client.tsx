@@ -50,10 +50,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Pencil, Plus, Trash2 } from "lucide-react";
-import { crewRateSchema, type CrewRateFormValues } from "@/schemas/crew";
-import { addCrewRate, deleteCrewRate } from "@/server/actions/crew";
+import { ChevronLeft, Pencil, Plus, Trash2, CheckCircle, XCircle, DollarSign } from "lucide-react";
+import { crewRateSchema, crewExpenseSchema, type CrewRateFormValues, type CrewExpenseFormValues } from "@/schemas/crew";
+import { addCrewRate, deleteCrewRate, createCrewExpense, updateCrewExpenseStatus } from "@/server/actions/crew";
 import { toast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 import type { CrewMemberDetail } from "@/server/queries/crew";
 import { formatDate } from "@/lib/utils";
 
@@ -66,6 +67,13 @@ function formatCents(cents: number, currency = "USD"): string {
     minimumFractionDigits: 0,
   }).format(cents / 100);
 }
+
+const expenseStatusBadge: Record<string, { label: string; className: string }> = {
+  PENDING: { label: "Pending", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  APPROVED: { label: "Approved", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  REIMBURSED: { label: "Reimbursed", className: "bg-green-50 text-green-700 border-green-200" },
+  REJECTED: { label: "Rejected", className: "bg-red-50 text-red-600 border-red-200" },
+};
 
 const timesheetStatusBadge: Record<string, { label: string; className: string }> = {
   DRAFT: { label: "Draft", className: "bg-slate-100 text-slate-600 border-slate-200" },
@@ -81,7 +89,43 @@ interface CrewDetailClientProps {
 export function CrewDetailClient({ member }: CrewDetailClientProps) {
   const router = useRouter();
   const [rateDialogOpen, setRateDialogOpen] = useState(false);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
+
+  const expenseForm = useForm<CrewExpenseFormValues>({
+    resolver: zodResolver(crewExpenseSchema),
+    defaultValues: {
+      crewMemberId: member.id,
+      description: "",
+      amount: 0,
+      currency: "USD",
+      date: new Date().toISOString().slice(0, 10),
+      notes: "",
+    },
+  });
+
+  async function onAddExpense(values: CrewExpenseFormValues) {
+    setIsPending(true);
+    try {
+      const result = await createCrewExpense(values);
+      if ("error" in result && result.error) {
+        toast({ variant: "destructive", title: "Error adding expense" });
+        return;
+      }
+      toast({ title: "Expense added" });
+      setExpenseDialogOpen(false);
+      expenseForm.reset({ crewMemberId: member.id, currency: "USD", date: new Date().toISOString().slice(0, 10) });
+      router.refresh();
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleExpenseStatus(expenseId: string, status: "APPROVED" | "REIMBURSED" | "REJECTED") {
+    await updateCrewExpenseStatus(expenseId, status);
+    toast({ title: `Expense ${status.toLowerCase()}` });
+    router.refresh();
+  }
 
   const rateForm = useForm<CrewRateFormValues>({
     resolver: zodResolver(crewRateSchema),
@@ -171,6 +215,7 @@ export function CrewDetailClient({ member }: CrewDetailClientProps) {
           <TabsTrigger value="rates">Rates ({member.rates.length})</TabsTrigger>
           <TabsTrigger value="assignments">Assignments ({member.assignments.length})</TabsTrigger>
           <TabsTrigger value="timesheets">Timesheets ({member.timesheets.length})</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses ({member.expenses.length})</TabsTrigger>
         </TabsList>
 
         {/* Rates */}
@@ -329,7 +374,166 @@ export function CrewDetailClient({ member }: CrewDetailClientProps) {
             </Table>
           </div>
         </TabsContent>
+
+        {/* Expenses */}
+        <TabsContent value="expenses" className="mt-4">
+          <div className="flex justify-end mb-3">
+            <Button size="sm" onClick={() => setExpenseDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add expense
+            </Button>
+          </div>
+          <div className="rounded-md border bg-white">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {member.expenses.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-16 text-center text-muted-foreground">
+                      No expenses.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {member.expenses.map((exp) => {
+                  const badge = expenseStatusBadge[exp.status];
+                  return (
+                    <TableRow key={exp.id}>
+                      <TableCell className="text-sm">{formatDate(exp.date)}</TableCell>
+                      <TableCell className="text-sm font-medium">{exp.description}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {formatCents(exp.amount, exp.currency)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={badge.className}>
+                          {badge.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {exp.status === "PENDING" && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Approve"
+                                onClick={() => handleExpenseStatus(exp.id, "APPROVED")}
+                              >
+                                <CheckCircle className="h-4 w-4 text-blue-600" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Reject"
+                                onClick={() => handleExpenseStatus(exp.id, "REJECTED")}
+                              >
+                                <XCircle className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
+                          {exp.status === "APPROVED" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Mark reimbursed"
+                              onClick={() => handleExpenseStatus(exp.id, "REIMBURSED")}
+                            >
+                              <DollarSign className="h-4 w-4 text-green-600" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
       </Tabs>
+
+      {/* Expense form dialog */}
+      <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add expense</DialogTitle>
+          </DialogHeader>
+          <Form {...expenseForm}>
+            <form onSubmit={expenseForm.handleSubmit(onAddExpense)} className="space-y-4">
+              <FormField
+                control={expenseForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description *</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={expenseForm.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Amount (cents) *</FormLabel>
+                      <FormControl><Input type="number" min={0} {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={expenseForm.control}
+                  name="currency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Currency</FormLabel>
+                      <FormControl><Input maxLength={3} {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={expenseForm.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Date *</FormLabel>
+                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={expenseForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl><Textarea rows={2} value={field.value ?? ""} onChange={field.onChange} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setExpenseDialogOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={isPending}>
+                  {isPending ? "Adding…" : "Add expense"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       {/* Rate form dialog */}
       <Dialog open={rateDialogOpen} onOpenChange={setRateDialogOpen}>

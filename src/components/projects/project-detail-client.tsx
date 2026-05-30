@@ -16,9 +16,20 @@ import {
 import { KitListClient } from "@/components/projects/kit-list-client";
 import { SubRentalsClient } from "@/components/projects/sub-rentals-client";
 import { ExpensesClient } from "@/components/projects/expenses-client";
-import { updateProjectStatus } from "@/server/actions/projects";
+import { updateProjectStatus, deleteProject } from "@/server/actions/projects";
 import { toast } from "@/hooks/use-toast";
-import { ChevronLeft, Pencil, ChevronDown } from "lucide-react";
+import { ChevronLeft, Pencil, ChevronDown, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import type { ProjectDetail, ProjectPnL } from "@/server/queries/projects";
 import type { ItemListEntry } from "@/server/queries/inventory";
 import { formatDate } from "@/lib/utils";
@@ -122,6 +133,46 @@ export function ProjectDetailClient({
               Edit
             </Link>
           </Button>
+
+          {project.status === "INQUIRY" && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/5"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete project?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently deletes &quot;{project.name}&quot; and all kit list items. This cannot be undone. Only Inquiry-status projects can be deleted.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive hover:bg-destructive/90"
+                    onClick={async () => {
+                      const result = await deleteProject(project.id);
+                      if (result.error) {
+                        toast({ variant: "destructive", title: result.error });
+                      } else {
+                        toast({ title: "Project deleted" });
+                        router.push("/dashboard/projects");
+                      }
+                    }}
+                  >
+                    Delete project
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 

@@ -58,3 +58,20 @@ export async function updateClient(id: string, data: unknown) {
   revalidatePath(`/dashboard/clients/${id}`);
   return { success: true };
 }
+
+export async function deleteClient(id: string) {
+  const activeProjects = await prisma.project.count({
+    where: {
+      clientId: id,
+      status: { notIn: ["CANCELLED", "COMPLETED"] },
+    },
+  });
+
+  if (activeProjects > 0) {
+    return { error: `Cannot delete: client has ${activeProjects} active project(s). Cancel or complete them first.` };
+  }
+
+  await prisma.client.delete({ where: { id } });
+  revalidatePath("/dashboard/clients");
+  return { success: true };
+}

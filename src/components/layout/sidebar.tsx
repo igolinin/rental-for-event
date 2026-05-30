@@ -15,6 +15,7 @@ import {
   Settings,
   Truck,
   Building2,
+  UserCog,
 } from "lucide-react";
 
 const navItems = [
@@ -67,6 +68,11 @@ const navItems = [
     label: "Reports",
     href: "/dashboard/reports",
     icon: TrendingUp,
+  },
+  {
+    label: "Team",
+    href: "/dashboard/users",
+    icon: UserCog,
   },
   {
     label: "Settings",

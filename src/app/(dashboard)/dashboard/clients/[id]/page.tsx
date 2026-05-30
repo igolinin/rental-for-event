@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getClientById } from "@/server/queries/clients";
+import { DeleteClientButton } from "@/components/clients/delete-client-button";
 import { formatDate } from "@/lib/utils";
 
 interface PageProps {
@@ -85,6 +86,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
               Edit
             </Link>
           </Button>
+          <DeleteClientButton clientId={client.id} clientName={client.name} />
         </div>
       </div>
 

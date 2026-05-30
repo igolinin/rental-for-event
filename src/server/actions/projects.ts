@@ -85,6 +85,25 @@ export async function updateProject(id: string, data: unknown) {
   return { success: true };
 }
 
+export async function deleteProject(id: string) {
+  const project = await prisma.project.findUnique({
+    where: { id },
+    select: { status: true, _count: { select: { invoices: true } } },
+  });
+
+  if (!project) return { error: "Project not found." };
+  if (project.status !== "INQUIRY") {
+    return { error: "Only projects in Inquiry status can be deleted." };
+  }
+  if (project._count.invoices > 0) {
+    return { error: "Cannot delete: project has invoices. Void them first." };
+  }
+
+  await prisma.project.delete({ where: { id } });
+  revalidatePath("/dashboard/projects");
+  return { success: true };
+}
+
 export async function updateProjectStatus(
   id: string,
   status: "INQUIRY" | "QUOTED" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
@@ -291,6 +310,78 @@ export async function addSubRentalItem(subRentalId: string, projectId: string, d
 
 export async function removeSubRentalItem(itemId: string, projectId: string) {
   await prisma.subRentalItem.delete({ where: { id: itemId } });
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  return { success: true };
+}
+
+// ─── Serialized Unit Allocation ───────────────────────────────────────────────
+
+export async function fetchSerializedUnitsForKitItem(kitItemId: string) {
+  const kitItem = await prisma.projectEquipmentItem.findUnique({
+    where: { id: kitItemId },
+    include: {
+      inventoryItem: {
+        include: { serializedUnits: { orderBy: { serialNumber: "asc" } } },
+      },
+      allocations: { select: { serializedUnitId: true } },
+      project: { select: { id: true, startAt: true, endAt: true } },
+    },
+  });
+
+  if (!kitItem) return { error: "Kit item not found." };
+
+  const { id: projectId, startAt, endAt } = kitItem.project;
+  const currentIds = new Set(kitItem.allocations.map((a) => a.serializedUnitId));
+  const allUnitIds = kitItem.inventoryItem.serializedUnits.map((u) => u.id);
+
+  const conflicts = await prisma.projectEquipmentAllocation.findMany({
+    where: {
+      serializedUnitId: { in: allUnitIds },
+      projectEquipmentItem: {
+        project: {
+          id: { not: projectId },
+          startAt: { lte: endAt },
+          endAt: { gte: startAt },
+          status: { notIn: ["CANCELLED", "COMPLETED"] },
+        },
+      },
+    },
+    select: { serializedUnitId: true },
+  });
+  const conflictSet = new Set(conflicts.map((c) => c.serializedUnitId));
+
+  return {
+    units: kitItem.inventoryItem.serializedUnits.map((unit) => ({
+      id: unit.id,
+      serialNumber: unit.serialNumber,
+      assetTag: unit.assetTag,
+      status: unit.status as string,
+      isAssignedToThisItem: currentIds.has(unit.id),
+      isAvailable:
+        (unit.status === "AVAILABLE" || unit.status === "IN_SERVICE") &&
+        !conflictSet.has(unit.id),
+    })),
+  };
+}
+
+export async function updateEquipmentAllocation(
+  kitItemId: string,
+  unitIds: string[],
+  projectId: string
+) {
+  await prisma.projectEquipmentAllocation.deleteMany({
+    where: { projectEquipmentItemId: kitItemId },
+  });
+
+  if (unitIds.length > 0) {
+    await prisma.projectEquipmentAllocation.createMany({
+      data: unitIds.map((unitId) => ({
+        projectEquipmentItemId: kitItemId,
+        serializedUnitId: unitId,
+      })),
+    });
+  }
+
   revalidatePath(`/dashboard/projects/${projectId}`);
   return { success: true };
 }
