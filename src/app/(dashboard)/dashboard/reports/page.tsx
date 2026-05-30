@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { FileDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -102,6 +103,14 @@ export default async function ReportsPage({ searchParams }: PageProps) {
         >
           Apply
         </button>
+        <Link
+          href={`/dashboard/reports/print?type=${report}&from=${from}&to=${to}`}
+          target="_blank"
+          className="inline-flex items-center gap-1.5 justify-center rounded-md border border-input bg-transparent px-3 h-9 text-sm shadow-sm hover:bg-accent hover:text-accent-foreground ml-auto"
+        >
+          <FileDown className="h-4 w-4" />
+          Export PDF
+        </Link>
       </form>
 
       {/* Revenue report */}

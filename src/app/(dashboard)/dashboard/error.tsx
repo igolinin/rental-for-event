@@ -11,7 +11,7 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    // Error digest is available in production logs; no need to re-log here
   }, [error]);
 
   return (

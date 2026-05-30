@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { projectSchema } from "@/schemas/projects";
 import { timesheetSchema, crewRateSchema } from "@/schemas/crew";
-import { inventoryItemSchema } from "@/schemas/inventory";
+import { inventoryItemSchema, inventoryItemSchemaRefined } from "@/schemas/inventory";
 import { clientSchema } from "@/schemas/clients";
 import { invoiceSchema, paymentSchema } from "@/schemas/invoices";
 
@@ -56,6 +56,37 @@ describe("projectSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects startAt before loadInAt", () => {
+    const result = projectSchema.safeParse({
+      ...BASE_PROJECT,
+      loadInAt: "2026-06-05",
+      startAt: "2026-06-01",
+      endAt: "2026-06-07",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects loadOutAt before endAt", () => {
+    const result = projectSchema.safeParse({
+      ...BASE_PROJECT,
+      startAt: "2026-06-01",
+      endAt: "2026-06-07",
+      loadOutAt: "2026-06-05",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts valid loadIn → start → end → loadOut chain", () => {
+    const result = projectSchema.safeParse({
+      ...BASE_PROJECT,
+      loadInAt: "2026-05-31",
+      startAt: "2026-06-01",
+      endAt: "2026-06-05",
+      loadOutAt: "2026-06-06",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("taxRate accepts 0", () => {
     expect(projectSchema.safeParse({ ...BASE_PROJECT, taxRate: 0 }).success).toBe(true);
   });
@@ -93,7 +124,28 @@ describe("timesheetSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it.todo("should reject clockOut <= clockIn (validation not yet implemented — FR-11.7)");
+  it("rejects clockOut <= clockIn (FR-11.7)", () => {
+    const result = timesheetSchema.safeParse({
+      ...BASE_TIMESHEET,
+      clockIn: "2026-06-01T10:00:00",
+      clockOut: "2026-06-01T08:00:00",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => i.path.includes("clockOut"))).toBe(true);
+    }
+  });
+
+  it("rejects break longer than shift", () => {
+    // 1h shift with 90 min break
+    const result = timesheetSchema.safeParse({
+      ...BASE_TIMESHEET,
+      clockIn: "2026-06-01T08:00:00",
+      clockOut: "2026-06-01T09:00:00",
+      breakMinutes: 90,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("crewRateSchema", () => {
@@ -108,9 +160,12 @@ describe("crewRateSchema", () => {
     expect(crewRateSchema.safeParse(BASE_RATE).success).toBe(true);
   });
 
-  it("accepts amount of 0", () => {
-    // Current schema allows 0; per FR gap this may become min(1) in Phase 10
-    expect(crewRateSchema.safeParse({ ...BASE_RATE, amount: 0 }).success).toBe(true);
+  it("rejects amount of 0 (rates must be > 0)", () => {
+    expect(crewRateSchema.safeParse({ ...BASE_RATE, amount: 0 }).success).toBe(false);
+  });
+
+  it("accepts positive amount", () => {
+    expect(crewRateSchema.safeParse({ ...BASE_RATE, amount: 5000 }).success).toBe(true);
   });
 
   it("rejects invalid rateType", () => {
@@ -158,7 +213,14 @@ describe("inventoryItemSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it.todo("BULK item should reject totalQuantity = 0 (validation not yet implemented — FR-10B)");
+  it("BULK item rejects totalQuantity = 0 (FR-10B)", () => {
+    const result = inventoryItemSchemaRefined.safeParse({
+      ...BASE_ITEM,
+      trackingMode: "BULK" as const,
+      totalQuantity: 0,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("clientSchema", () => {

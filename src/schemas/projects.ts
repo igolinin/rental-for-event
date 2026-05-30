@@ -20,6 +20,12 @@ export const projectSchema = z.object({
 }).refine((d) => new Date(d.endAt) >= new Date(d.startAt), {
   message: "End date must be on or after start date",
   path: ["endAt"],
+}).refine((d) => !d.loadInAt || new Date(d.startAt) >= new Date(d.loadInAt), {
+  message: "Start date must be on or after load-in date",
+  path: ["startAt"],
+}).refine((d) => !d.loadOutAt || new Date(d.loadOutAt) >= new Date(d.endAt), {
+  message: "Load-out date must be on or after end date",
+  path: ["loadOutAt"],
 });
 
 export type ProjectFormValues = z.infer<typeof projectSchema>;

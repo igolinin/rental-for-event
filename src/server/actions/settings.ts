@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { safeDb } from "@/lib/db";
 import { z } from "zod";
 
 const settingsSchema = z.object({
@@ -24,36 +25,28 @@ export async function upsertSettings(data: unknown) {
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
   const d = parsed.data;
+  const payload = {
+    companyName: d.companyName,
+    companyAddress: d.companyAddress || null,
+    companyEmail: d.companyEmail || null,
+    companyPhone: d.companyPhone || null,
+    defaultCurrencyCode: d.defaultCurrencyCode,
+    defaultTaxRate: d.defaultTaxRate ?? null,
+    invoiceTermsDays: d.invoiceTermsDays,
+    invoiceNotes: d.invoiceNotes || null,
+    otDailyThreshold: d.otDailyThreshold,
+    otWeeklyThreshold: d.otWeeklyThreshold,
+  };
 
-  await prisma.systemSettings.upsert({
-    where: { id: "singleton" },
-    create: {
-      id: "singleton",
-      companyName: d.companyName,
-      companyAddress: d.companyAddress || null,
-      companyEmail: d.companyEmail || null,
-      companyPhone: d.companyPhone || null,
-      defaultCurrencyCode: d.defaultCurrencyCode,
-      defaultTaxRate: d.defaultTaxRate ?? null,
-      invoiceTermsDays: d.invoiceTermsDays,
-      invoiceNotes: d.invoiceNotes || null,
-      otDailyThreshold: d.otDailyThreshold,
-      otWeeklyThreshold: d.otWeeklyThreshold,
-    },
-    update: {
-      companyName: d.companyName,
-      companyAddress: d.companyAddress || null,
-      companyEmail: d.companyEmail || null,
-      companyPhone: d.companyPhone || null,
-      defaultCurrencyCode: d.defaultCurrencyCode,
-      defaultTaxRate: d.defaultTaxRate ?? null,
-      invoiceTermsDays: d.invoiceTermsDays,
-      invoiceNotes: d.invoiceNotes || null,
-      otDailyThreshold: d.otDailyThreshold,
-      otWeeklyThreshold: d.otWeeklyThreshold,
-    },
-  });
+  const result = await safeDb(
+    prisma.systemSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...payload },
+      update: payload,
+    })
+  );
 
+  if (result.isErr()) return { error: result.error };
   revalidatePath("/dashboard/settings");
   return { success: true };
 }

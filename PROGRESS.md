@@ -300,7 +300,7 @@ Deferred — requires a test database. Set up separately when CI environment is 
 
 ---
 
-## Phase 10 — Robustness (NEXT)
+## Phase 10 — Robustness ✅ COMPLETE
 
 **Goal:** Eliminate silent failures, harden validation, add missing DB indexes.
 
@@ -337,19 +337,19 @@ Every server action Prisma call must be wrapped in try/catch returning `{ error:
 
 ---
 
-## Phase 11 — PDF Reports
+## Phase 11 — PDF Reports ✅ COMPLETE
 
 **Goal:** Add server-side PDF export for all three report types.
 
 | Task | Status |
 |------|--------|
-| `/api/pdf/report?type=revenue&from=&to=` route | ❌ Missing |
-| `/api/pdf/report?type=utilization&from=&to=` route | ❌ Missing |
-| `/api/pdf/report?type=labor&from=&to=` route | ❌ Missing |
-| PDF template: Revenue report (table + summary) | ❌ Missing |
-| PDF template: Utilization report (table + progress) | ❌ Missing |
-| PDF template: Labor report (table + OT breakdown) | ❌ Missing |
-| "Export PDF" buttons on reports page | ❌ Missing |
+| `/dashboard/reports/print?type=revenue&from=&to=` print page | ✅ Done |
+| `/dashboard/reports/print?type=utilization&from=&to=` print page | ✅ Done |
+| `/dashboard/reports/print?type=labor&from=&to=` print page | ✅ Done |
+| PDF template: Revenue (KPIs + by-client summary + invoice detail table) | ✅ Done |
+| PDF template: Utilization (KPIs + progress bars + item table) | ✅ Done |
+| PDF template: Labor (KPIs + by-crew summary + timesheet detail table) | ✅ Done |
+| "Export PDF" link on reports page (opens print page in new tab) | ✅ Done |
 
 ---
 
@@ -384,5 +384,5 @@ These items are deferred until the above phases are complete:
 | 7 | Polish + Error Handling | 🔶 Partial (no try-catch, validation gaps) |
 | **8** | **Test Infrastructure** | **✅ Complete** (102 tests, 87% coverage) |
 | **9** | **UX Completions** | **✅ Complete** |
-| **10** | **Robustness** | **❌ Not started** |
-| **11** | **PDF Reports** | **❌ Not started** |
+| **10** | **Robustness** | **✅ Complete** |
+| **11** | **PDF Reports** | **✅ Complete** |

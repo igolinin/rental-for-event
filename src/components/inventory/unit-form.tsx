@@ -71,9 +71,11 @@ export function UnitFormDialog({
   async function onSubmit(values: SerializedUnitFormValues) {
     setIsPending(true);
     try {
-      const result = isEditing
-        ? await updateSerializedUnit(defaultValues!.id!, inventoryItemId, values)
-        : await addSerializedUnit(inventoryItemId, values);
+      const unitId = defaultValues?.id;
+      const result =
+        isEditing && unitId
+          ? await updateSerializedUnit(unitId, inventoryItemId, values)
+          : await addSerializedUnit(inventoryItemId, values);
 
       if ("error" in result && result.error) {
         toast({ variant: "destructive", title: "Error saving unit" });

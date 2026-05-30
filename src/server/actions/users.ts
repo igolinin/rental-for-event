@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { safeDb } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
 const createUserSchema = z.object({
@@ -35,17 +36,16 @@ export async function createUser(data: unknown) {
 
   const { name, email, password, role } = parsed.data;
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return { error: "A user with that email already exists." };
+  const existingResult = await safeDb(prisma.user.findUnique({ where: { email } }));
+  if (existingResult.isErr()) return { error: existingResult.error };
+  if (existingResult.value) return { error: "A user with that email already exists." };
 
   const passwordHash = await bcrypt.hash(password, 12);
 
-  const user = await prisma.user.create({
-    data: { name, email, passwordHash, role },
-  });
-
+  const result = await safeDb(prisma.user.create({ data: { name, email, passwordHash, role } }));
+  if (result.isErr()) return { error: result.error };
   revalidatePath("/dashboard/users");
-  return { success: true, id: user.id };
+  return { success: true, id: result.value.id };
 }
 
 export async function updateUser(id: string, data: unknown) {
@@ -56,8 +56,8 @@ export async function updateUser(id: string, data: unknown) {
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
   const { name, role, isActive } = parsed.data;
-
-  await prisma.user.update({ where: { id }, data: { name, role, isActive } });
+  const result = await safeDb(prisma.user.update({ where: { id }, data: { name, role, isActive } }));
+  if (result.isErr()) return { error: result.error };
   revalidatePath("/dashboard/users");
   return { success: true };
 }
@@ -69,7 +69,8 @@ export async function resetUserPassword(id: string, newPassword: string) {
   if (newPassword.length < 8) return { error: "Password must be at least 8 characters." };
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
-  await prisma.user.update({ where: { id }, data: { passwordHash } });
+  const result = await safeDb(prisma.user.update({ where: { id }, data: { passwordHash } }));
+  if (result.isErr()) return { error: result.error };
   revalidatePath("/dashboard/users");
   return { success: true };
 }

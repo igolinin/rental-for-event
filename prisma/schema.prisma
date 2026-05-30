@@ -246,6 +246,7 @@ model ProjectEquipmentAllocation {
   serializedUnit       SerializedUnit       @relation(fields: [serializedUnitId], references: [id])
 
   @@unique([projectEquipmentItemId, serializedUnitId])
+  @@index([serializedUnitId])
 }
 
 model ProjectExpense {

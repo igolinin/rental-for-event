@@ -23,6 +23,7 @@ export const inventoryItemSchema = z.object({
   subCategoryId: z.string().optional().nullable(),
   trackingMode: z.enum(["SERIALIZED", "BULK"]),
   totalQuantity: z.coerce.number().int().min(0).default(0),
+  // Refined below: BULK items require totalQuantity > 0
   dailyRateAmount: z.coerce.number().int().min(0).optional().nullable(),
   dailyRateCurrency: z.string().length(3).default("USD"),
   replacementCostAmount: z.coerce.number().int().min(0).optional().nullable(),
@@ -30,6 +31,11 @@ export const inventoryItemSchema = z.object({
   notes: z.string().max(1000).optional().nullable(),
   isActive: z.boolean().default(true),
 });
+
+export const inventoryItemSchemaRefined = inventoryItemSchema.refine(
+  (d) => d.trackingMode !== "BULK" || d.totalQuantity > 0,
+  { message: "Bulk items require a quantity greater than zero", path: ["totalQuantity"] }
+);
 
 export type InventoryItemFormValues = z.infer<typeof inventoryItemSchema>;
 
