@@ -353,9 +353,283 @@ Every server action Prisma call must be wrapped in try/catch returning `{ error:
 
 ---
 
-## Backlog / Future Consideration
+---
 
-These items are deferred until the above phases are complete:
+## Phase 12 — Project Operations ✅ COMPLETE
+
+**Goal:** Full project scheduling and crew operations — phases, crew on project, labor subcontracts, live availability alerts, multi-warehouse inventory.
+
+### 12A — Project Phases ✅
+- [x] `ProjectPhase` model (PhaseType enum: PACKING/LOAD_IN/SETUP/SHOW/STRIKE/LOAD_OUT/TRAVEL/CUSTOM)
+- [x] CUSTOM phase type requires a `customLabel` (validated in schema)
+- [x] Schedule tab on project detail — table with phase name, datetime range, crew count
+- [x] Add phase dialog with type picker + conditional custom label input
+- [x] Delete phase with AlertDialog; crew assignments unlinked (not deleted) via SetNull FK
+
+### 12B — Crew Management on Project ✅
+- [x] `CrewAssignment.phaseId` FK added (optional, SetNull on phase delete)
+- [x] Crew tab on project detail — table: name, role, phase badge, dates, remove
+- [x] Assign crew dialog: crew Select, optional phase Select, role, date range
+- [x] **Inline conflict warning** — 400ms debounce on crew member + date fields → `checkCrewMemberConflict` server action → amber advisory banner (server still enforces hard block)
+- [x] `checkCrewMemberConflict` exported from `src/server/actions/crew.ts`
+
+### 12C — Labor Subcontracts ✅
+- [x] `LaborSubcontract` model (vendor, role, quantity, daily rate, status, optional phase link)
+- [x] `LaborSubcontractStatus` enum: REQUESTED → CONFIRMED → RECEIVED → COMPLETED + CANCELLED
+- [x] Labor tab on project detail — card per vendor, status dropdown, estimated cost (rate × qty × days)
+- [x] Labor subcontract costs included in P&L (`laborSubcontractCosts` in `computeProjectPnL`)
+- [x] Actions in `src/server/actions/labor.ts` (create, updateStatus, delete)
+
+### 12D — Live Availability Alerts ✅
+- [x] `checkItemAvailability(inventoryItemId, projectId)` server action in `projects.ts`
+- [x] `useEffect` on `watchedItemId` in `KitListClient` — 300ms debounce, calls action
+- [x] Inline colored text below Qty field: green (≥3), amber (1–2), red (0)
+- [x] Loading state: "Checking availability…" while fetching
+
+### 12E — Multiple Warehouses ✅
+- [x] `Warehouse` model (name, address, city, country, isActive)
+- [x] `InventoryItemWarehouseStock` model for per-warehouse BULK qty tracking
+- [x] `SerializedUnit.warehouseId` FK (optional)
+- [x] `upsertWarehouseStock` atomically updates stock row + recomputes `InventoryItem.totalQuantity`
+- [x] `getAvailableQuantity` in `src/lib/availability.ts` **unchanged** (uses global `totalQuantity`)
+- [x] `/dashboard/warehouses` page with CRUD, unit count, activate/deactivate
+- [x] Sidebar "Warehouses" link after Inventory
+- [x] Serialized unit form gains optional Warehouse Select
+
+---
+
+## Phase 13 — Inventory Enrichment (NEXT)
+
+**Goal:** Rich inventory items with photos, free-form descriptions, and dynamic searchable properties.
+
+### 13A — Item Photos
+
+**DB changes:**
+```prisma
+model InventoryItemImage {
+  id              String        @id @default(cuid())
+  inventoryItemId String
+  url             String        // Vercel Blob / S3 URL or relative path
+  caption         String?
+  sortOrder       Int           @default(0)
+  isPrimary       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  @@index([inventoryItemId])
+}
+```
+Add `images InventoryItemImage[]` relation to `InventoryItem`.
+
+**Storage strategy:** Use Vercel Blob (`@vercel/blob`) for production; local `/public/uploads/` for dev. New API route `POST /api/upload/inventory-image` accepts `multipart/form-data`, returns `{ url }`. In dev, saves to disk. In prod, uploads to Blob store.
+
+**UI tasks:**
+- [ ] Image gallery on inventory item detail page (grid, primary image larger)
+- [ ] Upload button opens file picker; shows preview before saving
+- [ ] Drag-to-reorder images (or up/down buttons)
+- [ ] Delete image with confirmation
+- [ ] Primary image shown on inventory list as thumbnail
+- [ ] `getItemById` query includes `images` ordered by `sortOrder`
+
+**Server actions:** `addInventoryImage(itemId, url, caption)`, `deleteInventoryImage(imageId, itemId)`, `setPrimaryImage(imageId, itemId)`, `reorderImages(itemId, orderedIds)`
+
+### 13B — Dynamic Item Properties
+
+**Goal:** Flexible key-value attributes on inventory items for filtering and specs display (e.g. Power: 1200W, Weight: 23kg, IP-rated: true).
+
+**DB changes:**
+```prisma
+model InventoryPropertyDef {
+  id        String        @id @default(cuid())
+  name      String        @unique   // e.g. "Power (W)", "Weight (kg)", "IP-rated"
+  slug      String        @unique
+  valueType PropertyValueType
+  unit      String?       // display unit hint, e.g. "W", "kg", "dB"
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  values InventoryItemProperty[]
+  @@index([valueType])
+}
+
+enum PropertyValueType {
+  TEXT
+  NUMERIC
+  BOOLEAN
+}
+
+model InventoryItemProperty {
+  id            String               @id @default(cuid())
+  inventoryItemId String
+  propertyDefId  String
+  textValue      String?
+  numericValue   Decimal?            @db.Decimal(15, 4)
+  booleanValue   Boolean?
+
+  inventoryItem InventoryItem        @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  propertyDef   InventoryPropertyDef @relation(fields: [propertyDefId], references: [id])
+
+  @@unique([inventoryItemId, propertyDefId])
+  @@index([inventoryItemId])
+  @@index([propertyDefId])
+}
+```
+Add `properties InventoryItemProperty[]` and `imageList InventoryItemImage[]` to `InventoryItem`.
+
+**Property management UI:**
+- [ ] Property definitions managed in Settings page (new "Item Properties" section) or Inventory → Categories page
+- [ ] Create property def: name, type (TEXT/NUMERIC/BOOLEAN), optional unit
+- [ ] On item detail page: "Properties" tab showing all defined properties with current values
+- [ ] Inline edit each property value (toggle for BOOLEAN, number input for NUMERIC, text for TEXT)
+- [ ] Inventory list filter: "Filter by property" — e.g. show all items where Power > 1000W
+
+**Server actions:** `createPropertyDef`, `deletePropertyDef`, `upsertItemProperty(itemId, propertyDefId, value)`, `deleteItemProperty`
+
+**Tests (new):**
+- `propertySchema: NUMERIC rejects non-numeric value`
+- `propertySchema: BOOLEAN must be true/false`
+- `upsertItemProperty: updates existing, creates if absent`
+
+---
+
+## Phase 14 — CSV Import / Export
+
+**Goal:** Bulk import and export inventory items and crew roster via CSV or Excel spreadsheet.
+
+### 14A — Inventory CSV Export
+
+- [ ] "Export CSV" button on `/dashboard/inventory` page
+- [ ] API route `GET /api/export/inventory.csv` — returns RFC 4180 CSV
+- [ ] Columns: refCode, name, category, subCategory, trackingMode, totalQuantity, dailyRateAmount, dailyRateCurrency, replacementCostAmount, isActive, serialNumbers (semicolon-joined for SERIALIZED)
+- [ ] Date-stamped filename: `inventory-2026-06-01.csv`
+
+### 14B — Inventory CSV Import
+
+- [ ] "Import CSV" button on inventory page opens upload dialog
+- [ ] API route `POST /api/import/inventory` — parses CSV, validates rows, upserts items
+- [ ] Upsert logic: match on `refCode` if present, else create new
+- [ ] Validation: required fields (name, category, trackingMode); numeric fields coerced; unknown categories → create or error (configurable)
+- [ ] Result: `{ created: N, updated: N, errors: [{row, message}] }` shown in dialog
+- [ ] CSV template download link
+
+### 14C — Crew CSV Export
+
+- [ ] "Export CSV" on `/dashboard/crew`
+- [ ] API route `GET /api/export/crew.csv`
+- [ ] Columns: refCode, firstName, lastName, email, phone, type, role, isActive, taxId
+
+### 14D — Crew CSV Import
+
+- [ ] API route `POST /api/import/crew` — upsert on email
+- [ ] Validation: required firstName/lastName; valid type (EMPLOYEE/FREELANCER)
+- [ ] Result summary same as inventory import
+
+**Shared infrastructure:**
+- `src/lib/csv.ts` — `parseCSV(text)`, `toCSV(rows, headers)` utilities using the `papaparse` package
+- Import routes run in a transaction so partial failures roll back cleanly
+- Max 500 rows per import (validate server-side)
+
+---
+
+## Phase 15 — LLM-Powered Item Details
+
+**Goal:** Upload a photo or paste a description of a piece of equipment; the app calls an LLM with vision to suggest name, description, category, specs, and estimated replacement cost — pre-populating the item form for user review.
+
+### 15A — Provider Abstraction Layer
+
+New file `src/lib/ai.ts`:
+
+```typescript
+export type LLMProvider = "claude" | "openai" | "deepseek";
+
+export interface ItemSuggestion {
+  name: string;
+  description: string;
+  categoryHint: string;       // best-guess category name for matching
+  dailyRateHint: number | null; // estimated cents
+  replacementCostHint: number | null;
+  properties: { name: string; value: string }[]; // suggested specs
+}
+
+export async function inferItemDetails(
+  imageBase64: string,
+  mimeType: string,
+  textHint: string | undefined,
+  provider: LLMProvider,
+  apiKey: string
+): Promise<ItemSuggestion>
+```
+
+**Per-provider implementation:**
+- **Claude** — `@anthropic-ai/sdk`, model `claude-opus-4-8` (or configurable), vision via base64 image block. Prompt asks for structured JSON output.
+- **OpenAI** — `openai` SDK, model `gpt-4o`, vision via `image_url` with base64 data URI.
+- **DeepSeek** — OpenAI-compatible API (`baseURL: "https://api.deepseek.com"`), model `deepseek-chat` (text-only) or `deepseek-reasoner` — note DeepSeek does not currently support image input; falls back to text-only inference from the text hint.
+
+**Prompt template (same across providers):**
+```
+You are an expert in professional AV, lighting, and staging equipment.
+Given the image/description below, return ONLY valid JSON with this shape:
+{ name, description, categoryHint, dailyRateHintCents, replacementCostHintCents, properties: [{name, value}] }
+- name: short product name (brand + model if visible)
+- description: 2-3 sentence technical description
+- categoryHint: one of "Audio", "Lighting", "Video/LED", "Staging", "Other"
+- dailyRateHintCents: integer cents, null if unknown
+- replacementCostHintCents: integer cents, null if unknown
+- properties: up to 8 key technical specs (e.g. [{name:"Power",value:"1200W"},{name:"Weight",value:"23kg"}])
+```
+
+### 15B — Settings: AI Configuration
+
+New "AI / LLM" section on `/dashboard/settings` page:
+
+- [ ] Provider Select: Claude / OpenAI / DeepSeek / None (disabled)
+- [ ] API key input (masked, stored in `SystemSettings.aiProvider` + `SystemSettings.aiApiKey`)
+- [ ] Optional: model override text field (defaults shown per provider)
+- [ ] Test connection button — sends a minimal text request, shows "OK" or error
+
+**DB changes:** Add to `SystemSettings`:
+```prisma
+aiProvider String? // "claude" | "openai" | "deepseek"
+aiApiKey   String? // encrypted at rest (or env-var override)
+aiModel    String? // optional model override
+```
+
+Migration: `add_ai_settings`
+
+### 15C — Item Form: AI Fill Button
+
+On the create/edit inventory item form (`src/components/inventory/item-form.tsx`):
+
+- [ ] "AI fill" button (sparkle icon) next to the item name field — only shown when AI is configured in settings
+- [ ] Clicking opens an "AI fill" dialog:
+  - File picker for image (JPEG/PNG/WebP, max 5MB)
+  - Optional text hint textarea ("e.g. 'Martin MAC Encore Performance, moving head wash'")
+  - Provider badge showing which LLM is configured
+  - "Analyze" button → POST to `/api/ai/fill-item`
+- [ ] API route `POST /api/ai/fill-item`: receives image + hint, loads provider config from settings, calls `inferItemDetails`, returns `ItemSuggestion`
+- [ ] On success: pre-populate form fields (name, description, categoryId matched by hint, dailyRateAmount, replacementCostAmount)
+- [ ] Suggested properties shown as chips the user can click to add to the item's property list
+- [ ] User reviews everything before saving — AI output is never auto-saved
+
+**Tests:**
+- `src/lib/__tests__/ai.test.ts` — mock provider calls, verify JSON parsing, verify fallback on malformed response
+- Schema test: `ItemSuggestion` shape validation
+
+### 15D — Upload Endpoint
+
+New API route `POST /api/ai/fill-item`:
+```typescript
+// Accepts multipart/form-data: image (File), hint (string?), 
+// Reads AI config from DB settings
+// Returns ItemSuggestion JSON
+// Max image size: 5MB
+// Timeout: 30s
+// Rate limit: 10 req/min per session (to avoid accidental API cost)
+```
+
+---
+
+## Backlog / Future Consideration
 
 | Item | Notes |
 |------|-------|
@@ -363,11 +637,12 @@ These items are deferred until the above phases are complete:
 | Payment gateway integration | Stripe for deposit collection |
 | Accounting export | QuickBooks / Xero CSV export |
 | Mobile app / PWA | Currently web-only |
-| Calendar view | Drag-and-drop project scheduling |
-| Equipment QR codes | Scan to view/update unit status |
+| Calendar view | Drag-and-drop project scheduling with phase blocks |
+| Equipment QR codes | Scan to view/update unit status (links to item detail) |
 | Multi-tenant / multi-org | Currently single-organization |
 | Rate limiting on server actions | Prevent abuse on public-facing endpoints |
 | Audit log | Record who changed what and when |
+| Barcode scanning | Scan asset tags to assign serialized units to projects |
 
 ---
 
@@ -375,14 +650,18 @@ These items are deferred until the above phases are complete:
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 1 | Foundation, Auth, DB, Navigation | 🔶 Partial (user mgmt missing) |
+| 1 | Foundation, Auth, DB, Navigation | ✅ Complete (user mgmt added in Phase 9) |
 | 2 | Inventory + Maintenance | ✅ Complete |
-| 3 | Clients + Projects | 🔶 Partial (no delete, no alloc UI) |
-| 4 | Crew + Timesheets + Expenses | 🔶 Partial (expenses UI missing) |
+| 3 | Clients + Projects | ✅ Complete (delete + allocation added in Phase 9) |
+| 4 | Crew + Timesheets + Expenses | ✅ Complete (expenses UI added in Phase 9) |
 | 5 | Invoicing + PDF | ✅ Complete |
-| 6 | Reporting + Dashboard | 🔶 Partial (PDF export missing) |
-| 7 | Polish + Error Handling | 🔶 Partial (no try-catch, validation gaps) |
-| **8** | **Test Infrastructure** | **✅ Complete** (102 tests, 87% coverage) |
-| **9** | **UX Completions** | **✅ Complete** |
-| **10** | **Robustness** | **✅ Complete** |
-| **11** | **PDF Reports** | **✅ Complete** |
+| 6 | Reporting + Dashboard | ✅ Complete (PDF export added in Phase 11) |
+| 7 | Polish + Error Handling | ✅ Complete (neverthrow + validation in Phase 10) |
+| 8 | Test Infrastructure | ✅ Complete (109 tests, 87% coverage) |
+| 9 | UX Completions | ✅ Complete |
+| 10 | Robustness | ✅ Complete |
+| 11 | PDF Reports | ✅ Complete |
+| **12** | **Project Operations** | **✅ Complete** (phases, crew, labor, availability, warehouses) |
+| **13** | **Inventory Enrichment** | **❌ Not started** (photos + dynamic properties) |
+| **14** | **CSV Import / Export** | **❌ Not started** (inventory + crew) |
+| **15** | **LLM-Powered Item Details** | **❌ Not started** (Claude / OpenAI / DeepSeek) |
