@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProjectById, computeProjectPnL } from "@/server/queries/projects";
 import { getItems } from "@/server/queries/inventory";
+import { getCrewForSelect } from "@/server/queries/crew";
 import { ProjectDetailClient } from "@/components/projects/project-detail-client";
 
 interface PageProps {
@@ -16,9 +17,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const [project, inventoryItems] = await Promise.all([
+  const [project, inventoryItems, crewForSelect] = await Promise.all([
     getProjectById(id),
     getItems({ isActive: true }),
+    getCrewForSelect(),
   ]);
 
   if (!project) notFound();
@@ -30,6 +32,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       project={project}
       pnl={pnl}
       inventoryItems={inventoryItems}
+      crewForSelect={crewForSelect}
     />
   );
 }

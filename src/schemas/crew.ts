@@ -27,6 +27,7 @@ export type CrewRateFormValues = z.infer<typeof crewRateSchema>;
 
 export const crewAssignmentSchema = z.object({
   crewMemberId: z.string().min(1, "Crew member is required"),
+  phaseId: z.string().optional().nullable(),
   role: z.string().max(100).optional().nullable(),
   startAt: z.string().min(1, "Start date is required"),
   endAt: z.string().min(1, "End date is required"),

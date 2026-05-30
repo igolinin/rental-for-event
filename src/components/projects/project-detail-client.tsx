@@ -16,6 +16,9 @@ import {
 import { KitListClient } from "@/components/projects/kit-list-client";
 import { SubRentalsClient } from "@/components/projects/sub-rentals-client";
 import { ExpensesClient } from "@/components/projects/expenses-client";
+import { PhasesClient } from "@/components/projects/phases-client";
+import { CrewClient } from "@/components/projects/crew-client";
+import { LaborClient } from "@/components/projects/labor-client";
 import { updateProjectStatus, deleteProject } from "@/server/actions/projects";
 import { toast } from "@/hooks/use-toast";
 import { ChevronLeft, Pencil, ChevronDown, Trash2 } from "lucide-react";
@@ -32,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ProjectDetail, ProjectPnL } from "@/server/queries/projects";
 import type { ItemListEntry } from "@/server/queries/inventory";
+import type { CrewForSelectEntry } from "@/server/queries/crew";
 import { formatDate } from "@/lib/utils";
 
 const projectStatusBadge: Record<string, { label: string; className: string }> = {
@@ -59,12 +63,14 @@ interface ProjectDetailClientProps {
   project: NonNullable<ProjectDetail>;
   pnl: ProjectPnL;
   inventoryItems: ItemListEntry[];
+  crewForSelect: CrewForSelectEntry[];
 }
 
 export function ProjectDetailClient({
   project,
   pnl,
   inventoryItems,
+  crewForSelect,
 }: ProjectDetailClientProps) {
   const router = useRouter();
   const badge = projectStatusBadge[project.status];
@@ -197,10 +203,19 @@ export function ProjectDetailClient({
       </div>
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="schedule">
+            Schedule ({project.phases.length})
+          </TabsTrigger>
           <TabsTrigger value="kit">
             Kit list ({project.equipmentItems.length})
+          </TabsTrigger>
+          <TabsTrigger value="crew">
+            Crew ({project.crewAssignments.length})
+          </TabsTrigger>
+          <TabsTrigger value="labor">
+            Labor ({project.laborSubcontracts.length})
           </TabsTrigger>
           <TabsTrigger value="subrentals">
             Sub-rentals ({project.subRentals.length})
@@ -271,6 +286,18 @@ export function ProjectDetailClient({
           </div>
         </TabsContent>
 
+        {/* Schedule / Phases */}
+        <TabsContent value="schedule" className="mt-4">
+          <PhasesClient
+            projectId={project.id}
+            phases={project.phases}
+            crewForSelect={crewForSelect}
+            projectStartAt={projectStartStr}
+            projectEndAt={projectEndStr}
+            projectCurrency={project.currencyCode}
+          />
+        </TabsContent>
+
         {/* Kit list */}
         <TabsContent value="kit" className="mt-4">
           <KitListClient
@@ -278,6 +305,30 @@ export function ProjectDetailClient({
             equipmentItems={project.equipmentItems}
             inventoryItems={inventoryItems}
             projectCurrency={project.currencyCode}
+          />
+        </TabsContent>
+
+        {/* Crew */}
+        <TabsContent value="crew" className="mt-4">
+          <CrewClient
+            projectId={project.id}
+            crewAssignments={project.crewAssignments}
+            phases={project.phases}
+            crewForSelect={crewForSelect}
+            projectStartAt={projectStartStr}
+            projectEndAt={projectEndStr}
+          />
+        </TabsContent>
+
+        {/* Labor subcontracts */}
+        <TabsContent value="labor" className="mt-4">
+          <LaborClient
+            projectId={project.id}
+            laborSubcontracts={project.laborSubcontracts}
+            phases={project.phases}
+            projectCurrency={project.currencyCode}
+            projectStartAt={projectStartStr}
+            projectEndAt={projectEndStr}
           />
         </TabsContent>
 
@@ -321,8 +372,13 @@ export function ProjectDetailClient({
                 positive: false,
               },
               {
-                label: "Labour costs (approved)",
+                label: "Labour costs (approved timesheets)",
                 value: -pnl.laborCosts,
+                positive: false,
+              },
+              {
+                label: "Labor subcontracts",
+                value: -pnl.laborSubcontractCosts,
                 positive: false,
               },
             ].map((row) => (

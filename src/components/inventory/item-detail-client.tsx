@@ -52,6 +52,7 @@ import { formatDate } from "@/lib/utils";
 
 interface ItemDetailClientProps {
   item: NonNullable<ItemDetail>;
+  warehouses?: { id: string; name: string; city: string | null }[];
 }
 
 const unitStatusBadge: Record<string, { label: string; className: string }> = {
@@ -77,7 +78,7 @@ function formatCents(cents: number | null | undefined, currency = "USD"): string
   }).format(cents / 100);
 }
 
-export function ItemDetailClient({ item }: ItemDetailClientProps) {
+export function ItemDetailClient({ item, warehouses = [] }: ItemDetailClientProps) {
   const router = useRouter();
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false);
@@ -454,6 +455,7 @@ export function ItemDetailClient({ item }: ItemDetailClientProps) {
       <UnitFormDialog
         inventoryItemId={item.id}
         open={unitDialogOpen}
+        warehouses={warehouses}
         onOpenChange={(open) => {
           setUnitDialogOpen(open);
           if (!open) {
@@ -468,6 +470,7 @@ export function ItemDetailClient({ item }: ItemDetailClientProps) {
                 serialNumber: editingUnit.serialNumber,
                 assetTag: editingUnit.assetTag ?? "",
                 status: editingUnit.status,
+                warehouseId: (editingUnit as { warehouseId?: string | null }).warehouseId ?? "",
                 purchaseDate: editingUnit.purchaseDate
                   ? new Date(editingUnit.purchaseDate)
                       .toISOString()

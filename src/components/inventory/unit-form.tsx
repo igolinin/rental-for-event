@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MapPin } from "lucide-react";
 import {
   serializedUnitSchema,
   type SerializedUnitFormValues,
@@ -43,6 +44,7 @@ interface UnitFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultValues?: Partial<SerializedUnitFormValues> & { id?: string };
+  warehouses?: { id: string; name: string; city: string | null }[];
 }
 
 export function UnitFormDialog({
@@ -50,6 +52,7 @@ export function UnitFormDialog({
   open,
   onOpenChange,
   defaultValues,
+  warehouses = [],
 }: UnitFormDialogProps) {
   const [isPending, setIsPending] = useState(false);
   const isEditing = !!defaultValues?.id;
@@ -60,6 +63,7 @@ export function UnitFormDialog({
       serialNumber: "",
       assetTag: "",
       status: "AVAILABLE",
+      warehouseId: "",
       purchaseDate: "",
       purchasePriceAmount: undefined,
       purchasePriceCurrency: "USD",
@@ -148,6 +152,38 @@ export function UnitFormDialog({
                   </FormItem>
                 )}
               />
+              {warehouses.length > 0 && (
+                <FormField
+                  control={form.control}
+                  name="warehouseId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Warehouse</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="No warehouse assigned" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">
+                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                              <MapPin className="h-3.5 w-3.5" />
+                              No warehouse
+                            </span>
+                          </SelectItem>
+                          {warehouses.map((w) => (
+                            <SelectItem key={w.id} value={w.id}>
+                              {w.name}{w.city ? ` (${w.city})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="purchaseDate"

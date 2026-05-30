@@ -58,6 +58,30 @@ export async function getProjectById(id: string) {
         },
         orderBy: { sortOrder: "asc" },
       },
+      phases: {
+        include: {
+          crewAssignments: {
+            include: {
+              crewMember: { select: { id: true, firstName: true, lastName: true, role: true, type: true } },
+            },
+            orderBy: { startAt: "asc" },
+          },
+        },
+        orderBy: { sortOrder: "asc" },
+      },
+      crewAssignments: {
+        include: {
+          crewMember: { select: { id: true, firstName: true, lastName: true, role: true, type: true } },
+          phase: { select: { id: true, name: true, customLabel: true } },
+        },
+        orderBy: { startAt: "asc" },
+      },
+      laborSubcontracts: {
+        include: {
+          phase: { select: { id: true, name: true, customLabel: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
       subRentals: {
         include: { items: true },
         orderBy: { createdAt: "asc" },
@@ -111,8 +135,20 @@ export function computeProjectPnL(project: NonNullable<ProjectDetail>) {
     0
   );
 
+  // Labor subcontract costs (non-cancelled)
+  const laborSubcontractCosts = project.laborSubcontracts
+    .filter((lsc) => lsc.status !== "CANCELLED")
+    .reduce((sum, lsc) => {
+      if (!lsc.dailyRateAmount) return sum;
+      const days = Math.max(
+        1,
+        Math.ceil((lsc.endAt.getTime() - lsc.startAt.getTime()) / 86400000) + 1
+      );
+      return sum + lsc.dailyRateAmount * lsc.quantity * days;
+    }, 0);
+
   const grossRevenue = equipmentRevenue;
-  const totalCosts = subRentalCosts + expenseTotal + laborCosts;
+  const totalCosts = subRentalCosts + expenseTotal + laborCosts + laborSubcontractCosts;
   const grossMargin = grossRevenue - totalCosts;
   const marginPct = grossRevenue > 0 ? (grossMargin / grossRevenue) * 100 : 0;
 
@@ -121,6 +157,7 @@ export function computeProjectPnL(project: NonNullable<ProjectDetail>) {
     subRentalCosts,
     expenseTotal,
     laborCosts,
+    laborSubcontractCosts,
     totalCosts,
     grossMargin,
     marginPct,

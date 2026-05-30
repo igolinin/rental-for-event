@@ -45,6 +45,7 @@ export const serializedUnitSchema = z.object({
   serialNumber: z.string().min(1, "Serial number is required").max(100),
   assetTag: z.string().max(100).optional().nullable(),
   status: z.enum(["AVAILABLE", "IN_SERVICE", "IN_REPAIR", "RETIRED"]).default("AVAILABLE"),
+  warehouseId: z.string().optional().nullable(),
   purchaseDate: z.string().optional().nullable(),
   purchasePriceAmount: z.coerce.number().int().min(0).optional().nullable(),
   purchasePriceCurrency: z.string().length(3).default("USD"),

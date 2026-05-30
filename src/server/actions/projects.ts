@@ -122,6 +122,29 @@ export async function updateProjectStatus(
   return { success: true };
 }
 
+// ─── Availability check (called live from kit list form) ─────────────────────
+
+export async function checkItemAvailability(
+  inventoryItemId: string,
+  projectId: string
+): Promise<{ available: number; error?: string }> {
+  const projectResult = await safeDb(
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { startAt: true, endAt: true },
+    })
+  );
+  if (projectResult.isErr()) return { available: 0, error: projectResult.error };
+  if (!projectResult.value) return { available: 0, error: "Project not found." };
+  const available = await getAvailableQuantity(
+    inventoryItemId,
+    projectResult.value.startAt,
+    projectResult.value.endAt,
+    projectId
+  );
+  return { available };
+}
+
 // ─── Kit List (Equipment Items) ───────────────────────────────────────────────
 
 export async function addEquipmentItem(projectId: string, data: unknown) {

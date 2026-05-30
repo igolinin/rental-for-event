@@ -16,6 +16,7 @@ import {
   Truck,
   Building2,
   UserCog,
+  Warehouse,
 } from "lucide-react";
 
 const navItems = [
@@ -33,6 +34,11 @@ const navItems = [
     label: "Inventory",
     href: "/dashboard/inventory",
     icon: Package,
+  },
+  {
+    label: "Warehouses",
+    href: "/dashboard/warehouses",
+    icon: Warehouse,
   },
   {
     label: "Maintenance",

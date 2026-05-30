@@ -136,13 +136,42 @@ export async function createCrewAssignment(projectId: string, data: unknown) {
 
   const result = await safeDb(
     prisma.crewAssignment.create({
-      data: { projectId, crewMemberId: d.crewMemberId, role: d.role, startAt, endAt, notes: d.notes },
+      data: {
+        projectId,
+        crewMemberId: d.crewMemberId,
+        phaseId: d.phaseId || null,
+        role: d.role,
+        startAt,
+        endAt,
+        notes: d.notes,
+      },
     })
   );
   if (result.isErr()) return { error: result.error };
   revalidatePath(`/dashboard/projects/${projectId}`);
   revalidatePath("/dashboard/crew");
   return { success: true };
+}
+
+export async function checkCrewMemberConflict(
+  crewMemberId: string,
+  startAt: string,
+  endAt: string,
+  excludeProjectId: string
+): Promise<{ conflict: { projectName: string } | null }> {
+  const result = await safeDb(
+    prisma.crewAssignment.findFirst({
+      where: {
+        crewMemberId,
+        projectId: { not: excludeProjectId },
+        startAt: { lte: new Date(endAt) },
+        endAt: { gte: new Date(startAt) },
+      },
+      include: { project: { select: { name: true } } },
+    })
+  );
+  if (result.isErr() || !result.value) return { conflict: null };
+  return { conflict: { projectName: result.value.project.name } };
 }
 
 export async function deleteCrewAssignment(assignmentId: string, projectId: string) {

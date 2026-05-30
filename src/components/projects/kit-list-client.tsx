@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -49,7 +49,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { equipmentItemSchema, type EquipmentItemFormValues } from "@/schemas/projects";
-import { addEquipmentItem, removeEquipmentItem, fetchSerializedUnitsForKitItem, updateEquipmentAllocation } from "@/server/actions/projects";
+import { addEquipmentItem, removeEquipmentItem, fetchSerializedUnitsForKitItem, updateEquipmentAllocation, checkItemAvailability } from "@/server/actions/projects";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Trash2, Tag } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -90,6 +90,12 @@ export function KitListClient({
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [availInfo, setAvailInfo] = useState<{ available: number; checked: boolean; loading: boolean }>({
+    available: 0,
+    checked: false,
+    loading: false,
+  });
+  const availTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [allocDialogOpen, setAllocDialogOpen] = useState(false);
   const [allocKitItemId, setAllocKitItemId] = useState<string | null>(null);
   const [allocUnits, setAllocUnits] = useState<SerializedUnit[]>([]);
@@ -113,6 +119,19 @@ export function KitListClient({
 
   const watchedItemId = form.watch("inventoryItemId");
   const selectedInvItem = inventoryItems.find((i) => i.id === watchedItemId);
+
+  useEffect(() => {
+    if (!watchedItemId) {
+      setAvailInfo({ available: 0, checked: false, loading: false });
+      return;
+    }
+    setAvailInfo((prev) => ({ ...prev, loading: true, checked: false }));
+    if (availTimeout.current) clearTimeout(availTimeout.current);
+    availTimeout.current = setTimeout(async () => {
+      const result = await checkItemAvailability(watchedItemId, projectId);
+      setAvailInfo({ available: result.available, checked: true, loading: false });
+    }, 300);
+  }, [watchedItemId, projectId]);
 
   async function onSubmit(values: EquipmentItemFormValues) {
     setIsPending(true);
@@ -294,7 +313,7 @@ export function KitListClient({
       )}
 
       {/* Add dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setAvailInfo({ available: 0, checked: false, loading: false }); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add equipment to kit list</DialogTitle>
@@ -337,6 +356,24 @@ export function KitListClient({
                         <Input type="number" min={1} {...field} />
                       </FormControl>
                       <FormMessage />
+                      {availInfo.loading && (
+                        <p className="text-xs text-muted-foreground mt-1">Checking availability…</p>
+                      )}
+                      {availInfo.checked && !availInfo.loading && (
+                        <p className={`text-xs mt-1 ${
+                          availInfo.available === 0
+                            ? "text-red-600"
+                            : availInfo.available <= 2
+                            ? "text-amber-600"
+                            : "text-green-700"
+                        }`}>
+                          {availInfo.available === 0
+                            ? "Not available for your project dates"
+                            : availInfo.available <= 2
+                            ? `Only ${availInfo.available} available for your project dates`
+                            : `${availInfo.available} available for your project dates`}
+                        </p>
+                      )}
                     </FormItem>
                   )}
                 />

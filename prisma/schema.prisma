@@ -58,6 +58,26 @@ model Client {
 }
 
 // ============================================================
+// WAREHOUSES
+// ============================================================
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  city      String?
+  country   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  serializedUnits SerializedUnit[]
+  inventoryStocks InventoryItemWarehouseStock[]
+
+  @@index([isActive])
+}
+
+// ============================================================
 // INVENTORY
 // ============================================================
 
@@ -112,14 +132,29 @@ model InventoryItem {
 
   category       InventoryCategory     @relation(fields: [categoryId], references: [id])
   subCategory    InventorySubCategory? @relation(fields: [subCategoryId], references: [id])
-  serializedUnits SerializedUnit[]
+  serializedUnits  SerializedUnit[]
   projectLineItems ProjectEquipmentItem[]
   maintenanceLogs  MaintenanceLog[]
   subRentalItems   SubRentalItem[]
+  warehouseStocks  InventoryItemWarehouseStock[]
 
   @@index([categoryId])
   @@index([trackingMode])
   @@index([isActive])
+}
+
+model InventoryItemWarehouseStock {
+  id              String        @id @default(cuid())
+  inventoryItemId String
+  warehouseId     String
+  quantity        Int           @default(0)
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+
+  @@unique([inventoryItemId, warehouseId])
+  @@index([inventoryItemId])
+  @@index([warehouseId])
 }
 
 enum TrackingMode {
@@ -140,12 +175,16 @@ model SerializedUnit {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
+  warehouseId   String?
+  warehouse     Warehouse?                   @relation(fields: [warehouseId], references: [id])
+
   inventoryItem InventoryItem                @relation(fields: [inventoryItemId], references: [id])
   maintenanceLogs MaintenanceLog[]
   allocations   ProjectEquipmentAllocation[]
 
   @@unique([inventoryItemId, serialNumber])
   @@index([status])
+  @@index([warehouseId])
 }
 
 enum UnitStatus {
@@ -182,14 +221,16 @@ model Project {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  client           Client                 @relation(fields: [clientId], references: [id])
-  createdBy        User                   @relation("ProjectCreatedBy", fields: [createdById], references: [id])
-  equipmentItems   ProjectEquipmentItem[]
-  crewAssignments  CrewAssignment[]
-  subRentals       SubRental[]
-  invoices         Invoice[]
-  expenses         ProjectExpense[]
-  timesheets       Timesheet[]
+  client            Client                 @relation(fields: [clientId], references: [id])
+  createdBy         User                   @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  equipmentItems    ProjectEquipmentItem[]
+  crewAssignments   CrewAssignment[]
+  subRentals        SubRental[]
+  invoices          Invoice[]
+  expenses          ProjectExpense[]
+  timesheets        Timesheet[]
+  phases            ProjectPhase[]
+  laborSubcontracts LaborSubcontract[]
 
   @@index([status])
   @@index([clientId])
@@ -323,6 +364,73 @@ model SubRentalItem {
 }
 
 // ============================================================
+// PROJECT PHASES & LABOR SUBCONTRACTS
+// ============================================================
+
+enum PhaseType {
+  PACKING
+  LOAD_IN
+  SETUP
+  SHOW
+  STRIKE
+  LOAD_OUT
+  TRAVEL
+  CUSTOM
+}
+
+model ProjectPhase {
+  id          String    @id @default(cuid())
+  projectId   String
+  name        PhaseType
+  customLabel String?
+  startAt     DateTime
+  endAt       DateTime
+  sortOrder   Int       @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  crewAssignments   CrewAssignment[]
+  laborSubcontracts LaborSubcontract[]
+
+  @@index([projectId])
+}
+
+enum LaborSubcontractStatus {
+  REQUESTED
+  CONFIRMED
+  RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+model LaborSubcontract {
+  id                String                 @id @default(cuid())
+  projectId         String
+  phaseId           String?
+  vendorName        String
+  vendorContact     String?
+  vendorEmail       String?
+  role              String?
+  quantity          Int                    @default(1)
+  startAt           DateTime
+  endAt             DateTime
+  dailyRateAmount   Int?
+  dailyRateCurrency String                 @default("USD")
+  status            LaborSubcontractStatus @default(REQUESTED)
+  notes             String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase   ProjectPhase? @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([phaseId])
+}
+
+// ============================================================
 // CREW
 // ============================================================
 
@@ -379,18 +487,21 @@ model CrewAssignment {
   id           String   @id @default(cuid())
   projectId    String
   crewMemberId String
+  phaseId      String?
   role         String?
   startAt      DateTime
   endAt        DateTime
   notes        String?
   createdAt    DateTime @default(now())
 
-  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  crewMember CrewMember @relation(fields: [crewMemberId], references: [id])
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  crewMember CrewMember    @relation(fields: [crewMemberId], references: [id])
+  phase      ProjectPhase? @relation(fields: [phaseId], references: [id], onDelete: SetNull)
   timesheets Timesheet[]
 
   @@index([projectId])
   @@index([crewMemberId])
+  @@index([phaseId])
 }
 
 // ============================================================

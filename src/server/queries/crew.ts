@@ -62,6 +62,8 @@ export async function getCrewMemberById(id: string) {
 
 export type CrewMemberDetail = Awaited<ReturnType<typeof getCrewMemberById>>;
 
+export type CrewForSelectEntry = { id: string; firstName: string; lastName: string; role: string | null; type: string };
+
 // Lightweight for selects
 export async function getCrewForSelect() {
   return prisma.crewMember.findMany({
