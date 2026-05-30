@@ -137,10 +137,56 @@ model InventoryItem {
   maintenanceLogs  MaintenanceLog[]
   subRentalItems   SubRentalItem[]
   warehouseStocks  InventoryItemWarehouseStock[]
+  images           InventoryItemImage[]
+  properties       InventoryItemProperty[]
 
   @@index([categoryId])
   @@index([trackingMode])
   @@index([isActive])
+}
+
+model InventoryItemImage {
+  id              String        @id @default(cuid())
+  inventoryItemId String
+  url             String
+  caption         String?
+  sortOrder       Int           @default(0)
+  isPrimary       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryItemId])
+}
+
+model InventoryPropertyDef {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  slug      String            @unique
+  valueType PropertyValueType
+  unit      String?
+  sortOrder Int               @default(0)
+  createdAt DateTime          @default(now())
+
+  values InventoryItemProperty[]
+
+  @@index([valueType])
+}
+
+model InventoryItemProperty {
+  id              String               @id @default(cuid())
+  inventoryItemId String
+  propertyDefId   String
+  textValue       String?
+  numericValue    Decimal?             @db.Decimal(15, 4)
+  booleanValue    Boolean?
+
+  inventoryItem InventoryItem        @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  propertyDef   InventoryPropertyDef @relation(fields: [propertyDefId], references: [id], onDelete: Cascade)
+
+  @@unique([inventoryItemId, propertyDefId])
+  @@index([inventoryItemId])
+  @@index([propertyDefId])
 }
 
 model InventoryItemWarehouseStock {
@@ -160,6 +206,12 @@ model InventoryItemWarehouseStock {
 enum TrackingMode {
   SERIALIZED
   BULK
+}
+
+enum PropertyValueType {
+  TEXT
+  NUMERIC
+  BOOLEAN
 }
 
 model SerializedUnit {

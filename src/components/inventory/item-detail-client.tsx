@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { UnitFormDialog } from "@/components/inventory/unit-form";
 import { MaintenanceLogFormDialog } from "@/components/inventory/maintenance-log-form";
+import { ItemImagesClient } from "@/components/inventory/item-images-client";
+import { ItemPropertiesClient } from "@/components/inventory/item-properties-client";
 import {
   deleteSerializedUnit,
   updateMaintenanceLogStatus,
@@ -53,6 +55,7 @@ import { formatDate } from "@/lib/utils";
 interface ItemDetailClientProps {
   item: NonNullable<ItemDetail>;
   warehouses?: { id: string; name: string; city: string | null }[];
+  allPropertyDefs?: import("@/server/queries/inventory").PropertyDefEntry[];
 }
 
 const unitStatusBadge: Record<string, { label: string; className: string }> = {
@@ -78,7 +81,7 @@ function formatCents(cents: number | null | undefined, currency = "USD"): string
   }).format(cents / 100);
 }
 
-export function ItemDetailClient({ item, warehouses = [] }: ItemDetailClientProps) {
+export function ItemDetailClient({ item, warehouses = [], allPropertyDefs = [] }: ItemDetailClientProps) {
   const router = useRouter();
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false);
@@ -227,6 +230,12 @@ export function ItemDetailClient({ item, warehouses = [] }: ItemDetailClientProp
               Units ({item.serializedUnits.length})
             </TabsTrigger>
           )}
+          <TabsTrigger value="images">
+            Photos ({item.images.length})
+          </TabsTrigger>
+          <TabsTrigger value="properties">
+            Properties ({item.properties.length})
+          </TabsTrigger>
           <TabsTrigger value="maintenance">
             Maintenance ({item.maintenanceLogs.length})
           </TabsTrigger>
@@ -347,6 +356,23 @@ export function ItemDetailClient({ item, warehouses = [] }: ItemDetailClientProp
             </div>
           </TabsContent>
         )}
+
+        {/* Photos */}
+        <TabsContent value="images" className="mt-4">
+          <ItemImagesClient
+            inventoryItemId={item.id}
+            images={item.images}
+          />
+        </TabsContent>
+
+        {/* Properties */}
+        <TabsContent value="properties" className="mt-4">
+          <ItemPropertiesClient
+            inventoryItemId={item.id}
+            properties={item.properties}
+            allPropertyDefs={allPropertyDefs}
+          />
+        </TabsContent>
 
         {/* Maintenance */}
         <TabsContent value="maintenance" className="mt-4">

@@ -73,3 +73,13 @@ export const maintenanceLogSchema = z.object({
 });
 
 export type MaintenanceLogFormValues = z.infer<typeof maintenanceLogSchema>;
+
+// ─── Property Definitions ────────────────────────────────────────────────────
+
+export const propertyDefSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100),
+  valueType: z.enum(["TEXT", "NUMERIC", "BOOLEAN"]),
+  unit: z.string().max(20).optional().nullable(),
+});
+
+export type PropertyDefFormValues = z.infer<typeof propertyDefSchema>;

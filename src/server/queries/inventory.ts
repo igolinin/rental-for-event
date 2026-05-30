@@ -45,6 +45,11 @@ export async function getItems(params: GetItemsParams = {}) {
       category: true,
       subCategory: true,
       _count: { select: { serializedUnits: true } },
+      images: {
+        where: { isPrimary: true },
+        take: 1,
+        select: { url: true },
+      },
     },
     orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
   });
@@ -61,7 +66,15 @@ export async function getItemById(id: string) {
       category: true,
       subCategory: true,
       serializedUnits: {
+        include: { warehouse: { select: { id: true, name: true, city: true } } },
         orderBy: { serialNumber: "asc" },
+      },
+      images: { orderBy: { sortOrder: "asc" } },
+      properties: {
+        include: {
+          propertyDef: true,
+        },
+        orderBy: { propertyDef: { sortOrder: "asc" } },
       },
       maintenanceLogs: {
         include: {
@@ -108,3 +121,14 @@ export async function getMaintenanceLogs(params: GetMaintenanceParams = {}) {
 export type MaintenanceLogEntry = Awaited<
   ReturnType<typeof getMaintenanceLogs>
 >[number];
+
+// ─── Property definitions ─────────────────────────────────────────────────────
+
+export async function getPropertyDefs() {
+  return prisma.inventoryPropertyDef.findMany({
+    include: { _count: { select: { values: true } } },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+}
+
+export type PropertyDefEntry = Awaited<ReturnType<typeof getPropertyDefs>>[number];

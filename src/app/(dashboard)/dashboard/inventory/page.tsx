@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { Plus, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -127,6 +128,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10" />
               <TableHead>Name / Code</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Type</TableHead>
@@ -139,7 +141,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-24 text-center text-muted-foreground"
                 >
                   No inventory items found.
@@ -150,6 +152,21 @@ export default async function InventoryPage({ searchParams }: PageProps) {
               const badge = trackingBadge[item.trackingMode];
               return (
                 <TableRow key={item.id}>
+                  <TableCell className="p-2">
+                    {item.images[0] ? (
+                      <div className="relative w-10 h-10 rounded overflow-hidden bg-slate-100 flex-shrink-0">
+                        <Image
+                          src={item.images[0].url}
+                          alt={item.name}
+                          fill
+                          className="object-cover"
+                          sizes="40px"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-slate-100 flex-shrink-0" />
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Link
                       href={`/dashboard/inventory/${item.id}`}

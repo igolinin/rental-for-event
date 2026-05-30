@@ -10,6 +10,7 @@ import {
   inventoryItemSchema,
   serializedUnitSchema,
   maintenanceLogSchema,
+  propertyDefSchema,
 } from "@/schemas/inventory";
 import { auth } from "@/lib/auth";
 
@@ -315,5 +316,177 @@ export async function updateMaintenanceLogStatus(
   if (result.isErr()) return { error: result.error };
   revalidatePath("/dashboard/maintenance");
   revalidatePath("/dashboard/inventory");
+  return { success: true };
+}
+
+// ─── Item Images ──────────────────────────────────────────────────────────────
+
+export async function addInventoryImage(
+  inventoryItemId: string,
+  url: string,
+  caption?: string
+) {
+  // If no images exist yet, make this one primary
+  const existingCount = await safeDb(
+    prisma.inventoryItemImage.count({ where: { inventoryItemId } })
+  );
+  const isPrimary = existingCount.isOk() && existingCount.value === 0;
+
+  const maxSort = await safeDb(
+    prisma.inventoryItemImage.aggregate({
+      where: { inventoryItemId },
+      _max: { sortOrder: true },
+    })
+  );
+  const sortOrder = maxSort.isOk() ? (maxSort.value._max.sortOrder ?? -1) + 1 : 0;
+
+  const result = await safeDb(
+    prisma.inventoryItemImage.create({
+      data: { inventoryItemId, url, caption: caption || null, sortOrder, isPrimary },
+    })
+  );
+  if (result.isErr()) return { error: result.error };
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  revalidatePath("/dashboard/inventory");
+  return { success: true, id: result.value.id };
+}
+
+export async function deleteInventoryImage(imageId: string, inventoryItemId: string) {
+  const imgResult = await safeDb(
+    prisma.inventoryItemImage.findUnique({ where: { id: imageId } })
+  );
+  if (imgResult.isErr()) return { error: imgResult.error };
+  const wasPrimary = imgResult.value?.isPrimary ?? false;
+
+  const result = await safeDb(prisma.inventoryItemImage.delete({ where: { id: imageId } }));
+  if (result.isErr()) return { error: result.error };
+
+  // If deleted image was primary, promote the next one
+  if (wasPrimary) {
+    const next = await prisma.inventoryItemImage.findFirst({
+      where: { inventoryItemId },
+      orderBy: { sortOrder: "asc" },
+    });
+    if (next) {
+      await prisma.inventoryItemImage.update({
+        where: { id: next.id },
+        data: { isPrimary: true },
+      });
+    }
+  }
+
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  revalidatePath("/dashboard/inventory");
+  return { success: true };
+}
+
+export async function setPrimaryImage(imageId: string, inventoryItemId: string) {
+  const result = await safeDb(
+    prisma.$transaction([
+      prisma.inventoryItemImage.updateMany({
+        where: { inventoryItemId },
+        data: { isPrimary: false },
+      }),
+      prisma.inventoryItemImage.update({
+        where: { id: imageId },
+        data: { isPrimary: true },
+      }),
+    ])
+  );
+  if (result.isErr()) return { error: result.error };
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  revalidatePath("/dashboard/inventory");
+  return { success: true };
+}
+
+export async function updateImageCaption(imageId: string, inventoryItemId: string, caption: string) {
+  const result = await safeDb(
+    prisma.inventoryItemImage.update({ where: { id: imageId }, data: { caption: caption || null } })
+  );
+  if (result.isErr()) return { error: result.error };
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  return { success: true };
+}
+
+// ─── Property Definitions ─────────────────────────────────────────────────────
+
+export async function createPropertyDef(data: unknown) {
+  const parsed = propertyDefSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const { name, valueType, unit } = parsed.data;
+  const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const maxSort = await safeDb(
+    prisma.inventoryPropertyDef.aggregate({ _max: { sortOrder: true } })
+  );
+  const sortOrder = maxSort.isOk() ? (maxSort.value._max.sortOrder ?? -1) + 1 : 0;
+
+  const result = await safeDb(
+    prisma.inventoryPropertyDef.create({
+      data: { name, slug, valueType, unit: unit || null, sortOrder },
+    })
+  );
+  if (result.isErr()) return { error: result.error };
+  revalidatePath("/dashboard/inventory");
+  return { success: true, id: result.value.id };
+}
+
+export async function deletePropertyDef(id: string) {
+  // Check if in use
+  const countResult = await safeDb(
+    prisma.inventoryItemProperty.count({ where: { propertyDefId: id } })
+  );
+  if (countResult.isErr()) return { error: countResult.error };
+  if (countResult.value > 0) {
+    return { error: `Cannot delete: property is set on ${countResult.value} item(s).` };
+  }
+
+  const result = await safeDb(prisma.inventoryPropertyDef.delete({ where: { id } }));
+  if (result.isErr()) return { error: result.error };
+  revalidatePath("/dashboard/inventory");
+  return { success: true };
+}
+
+// ─── Item Properties ──────────────────────────────────────────────────────────
+
+export async function upsertItemProperty(
+  inventoryItemId: string,
+  propertyDefId: string,
+  value: { text?: string; numeric?: number | null; boolean?: boolean | null }
+) {
+  const result = await safeDb(
+    prisma.inventoryItemProperty.upsert({
+      where: { inventoryItemId_propertyDefId: { inventoryItemId, propertyDefId } },
+      create: {
+        inventoryItemId,
+        propertyDefId,
+        textValue: value.text ?? null,
+        numericValue: value.numeric ?? null,
+        booleanValue: value.boolean ?? null,
+      },
+      update: {
+        textValue: value.text ?? null,
+        numericValue: value.numeric ?? null,
+        booleanValue: value.boolean ?? null,
+      },
+    })
+  );
+  if (result.isErr()) return { error: result.error };
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
+  return { success: true };
+}
+
+export async function deleteItemProperty(
+  inventoryItemId: string,
+  propertyDefId: string
+) {
+  const result = await safeDb(
+    prisma.inventoryItemProperty.delete({
+      where: { inventoryItemId_propertyDefId: { inventoryItemId, propertyDefId } },
+    })
+  );
+  if (result.isErr()) return { error: result.error };
+  revalidatePath(`/dashboard/inventory/${inventoryItemId}`);
   return { success: true };
 }

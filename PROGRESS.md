@@ -398,7 +398,7 @@ Every server action Prisma call must be wrapped in try/catch returning `{ error:
 
 ---
 
-## Phase 13 — Inventory Enrichment (NEXT)
+## Phase 13 — Inventory Enrichment ✅ COMPLETE
 
 **Goal:** Rich inventory items with photos, free-form descriptions, and dynamic searchable properties.
 
@@ -662,6 +662,6 @@ New API route `POST /api/ai/fill-item`:
 | 10 | Robustness | ✅ Complete |
 | 11 | PDF Reports | ✅ Complete |
 | **12** | **Project Operations** | **✅ Complete** (phases, crew, labor, availability, warehouses) |
-| **13** | **Inventory Enrichment** | **❌ Not started** (photos + dynamic properties) |
+| **13** | **Inventory Enrichment** | **✅ Complete** (photos + dynamic properties) |
 | **14** | **CSV Import / Export** | **❌ Not started** (inventory + crew) |
 | **15** | **LLM-Powered Item Details** | **❌ Not started** (Claude / OpenAI / DeepSeek) |
