@@ -19,6 +19,8 @@ import { ExpensesClient } from "@/components/projects/expenses-client";
 import { PhasesClient } from "@/components/projects/phases-client";
 import { CrewClient } from "@/components/projects/crew-client";
 import { LaborClient } from "@/components/projects/labor-client";
+import { DiscountsClient } from "@/components/projects/discounts-client";
+import type { DiscountSpec } from "@/lib/discounts";
 import { updateProjectStatus } from "@/server/actions/projects";
 import { toast } from "@/hooks/use-toast";
 import { ChevronLeft, Pencil, ChevronDown } from "lucide-react";
@@ -70,6 +72,9 @@ interface ProjectDetailClientProps {
   pricingProfiles: PricingProfileLite[];
   profileTiers: Record<string, { minDays: number; multiplier: number }[]>;
   defaultProfileId: string | null;
+  projectDiscount: DiscountSpec | null;
+  categoryDiscounts: Record<string, DiscountSpec>;
+  kitCategories: { id: string; name: string }[];
 }
 
 export function ProjectDetailClient({
@@ -80,6 +85,9 @@ export function ProjectDetailClient({
   pricingProfiles,
   profileTiers,
   defaultProfileId,
+  projectDiscount,
+  categoryDiscounts,
+  kitCategories,
 }: ProjectDetailClientProps) {
   const router = useRouter();
   const badge = projectStatusBadge[project.status];
@@ -279,6 +287,14 @@ export function ProjectDetailClient({
             pricingProfiles={pricingProfiles}
             profileTiers={profileTiers}
             defaultProfileId={defaultProfileId}
+            projectDiscount={projectDiscount}
+            categoryDiscounts={categoryDiscounts}
+          />
+          <DiscountsClient
+            projectId={project.id}
+            projectDiscount={projectDiscount}
+            categoryDiscounts={categoryDiscounts}
+            kitCategories={kitCategories}
           />
         </TabsContent>
 
@@ -331,10 +347,17 @@ export function ProjectDetailClient({
           <div className="max-w-md space-y-3">
             {[
               {
-                label: "Equipment revenue",
+                label: "Equipment revenue (gross)",
                 value: pnl.equipmentRevenue,
                 positive: true,
               },
+              ...(pnl.equipmentDiscount > 0
+                ? [{
+                    label: "Equipment discount",
+                    value: -pnl.equipmentDiscount,
+                    positive: false,
+                  }]
+                : []),
               {
                 label: "Sub-rental costs",
                 value: -pnl.subRentalCosts,

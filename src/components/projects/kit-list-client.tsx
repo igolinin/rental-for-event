@@ -56,6 +56,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { ProjectDetail } from "@/server/queries/projects";
 import type { ItemListEntry } from "@/server/queries/inventory";
 import { computeLineTotal, type PricingTierLite } from "@/lib/pricing";
+import { computeLineDiscounts, type DiscountSpec, type DiscountLineInput } from "@/lib/discounts";
 
 interface PricingProfileLite { id: string; name: string; isDefault: boolean }
 
@@ -67,6 +68,8 @@ interface KitListClientProps {
   pricingProfiles: PricingProfileLite[];
   profileTiers: Record<string, PricingTierLite[]>;
   defaultProfileId: string | null;
+  projectDiscount: DiscountSpec | null;
+  categoryDiscounts: Record<string, DiscountSpec>;
 }
 
 function formatCents(cents: number | null | undefined, currency = "USD"): string {
@@ -95,6 +98,8 @@ export function KitListClient({
   pricingProfiles,
   profileTiers,
   defaultProfileId,
+  projectDiscount,
+  categoryDiscounts,
 }: KitListClientProps) {
   const router = useRouter();
 
@@ -131,6 +136,8 @@ export function KitListClient({
       rateType: "DAILY",
       rateDays: 1,
       pricingProfileId: "",
+      discountPercent: undefined,
+      discountFixed: undefined,
       description: "",
       notes: "",
     },
@@ -143,19 +150,31 @@ export function KitListClient({
   const watchedRate = form.watch("unitRateAmount");
   const watchedDays = form.watch("rateDays");
   const watchedRateType = form.watch("rateType");
+  const watchedDiscPct = form.watch("discountPercent");
+  const watchedDiscFixed = form.watch("discountFixed");
 
   // Live line-total preview using the resolved curve
   const previewTiers = resolveLineTiers(
     watchedProfileId || null,
     selectedInvItem?.pricingProfileId ?? null
   );
-  const previewTotal = computeLineTotal(
+  const previewGross = computeLineTotal(
     Number(watchedRate ?? selectedInvItem?.dailyRateAmount ?? 0),
     Number(watchedDays ?? 1),
     Number(watchedQty ?? 1),
     previewTiers,
     watchedRateType ?? "DAILY"
   );
+  // Item lock disables discount entirely
+  const itemLocked = (selectedInvItem as { noDiscount?: boolean } | undefined)?.noDiscount ?? false;
+  const previewDiscount = itemLocked
+    ? 0
+    : watchedDiscPct
+    ? Math.min(Math.round(previewGross * Number(watchedDiscPct)), previewGross)
+    : watchedDiscFixed
+    ? Math.min(Number(watchedDiscFixed), previewGross)
+    : 0;
+  const previewTotal = previewGross - previewDiscount;
 
   useEffect(() => {
     if (!watchedItemId) {
@@ -238,12 +257,27 @@ export function KitListClient({
     });
   }
 
-  function lineTotalFor(item: NonNullable<ProjectDetail>["equipmentItems"][number]): number {
+  function grossFor(item: NonNullable<ProjectDetail>["equipmentItems"][number]): number {
     const tiers = resolveLineTiers(item.pricingProfileId, item.inventoryItem.pricingProfileId);
     return computeLineTotal(item.unitRateAmount ?? 0, item.rateDays, item.quantityNeeded, tiers, item.rateType);
   }
 
-  const kitTotal = equipmentItems.reduce((sum, item) => sum + lineTotalFor(item), 0);
+  // Resolve per-line discounts (line → category → project), respecting locks.
+  const discountInputs: DiscountLineInput[] = equipmentItems.map((item) => ({
+    id: item.id,
+    lineTotal: grossFor(item),
+    categoryId: item.inventoryItem.categoryId,
+    locked: (item.inventoryItem as { noDiscount?: boolean }).noDiscount ?? false,
+    lineDiscount:
+      item.discountPercent != null || item.discountFixed != null
+        ? { percent: item.discountPercent != null ? Number(item.discountPercent) : null, fixed: item.discountFixed ?? null }
+        : null,
+  }));
+  const { perLine: lineDiscounts } = computeLineDiscounts(discountInputs, categoryDiscounts, projectDiscount);
+
+  const kitGross = equipmentItems.reduce((sum, item) => sum + grossFor(item), 0);
+  const kitDiscount = Object.values(lineDiscounts).reduce((s, v) => s + v, 0);
+  const kitTotal = kitGross - kitDiscount;
 
   return (
     <div>
@@ -278,7 +312,10 @@ export function KitListClient({
               </TableRow>
             )}
             {equipmentItems.map((item) => {
-              const lineTotal = lineTotalFor(item);
+              const gross = grossFor(item);
+              const discount = lineDiscounts[item.id] ?? 0;
+              const lineTotal = gross - discount;
+              const cur = item.unitRateCurrency ?? projectCurrency;
               return (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium text-sm">
@@ -298,7 +335,17 @@ export function KitListClient({
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{item.rateDays}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">
-                    {formatCents(lineTotal, item.unitRateCurrency ?? projectCurrency)}
+                    {discount > 0 ? (
+                      <div>
+                        <span className="text-muted-foreground line-through text-xs mr-1">
+                          {formatCents(gross, cur)}
+                        </span>
+                        {formatCents(lineTotal, cur)}
+                        <div className="text-[10px] text-red-600">−{formatCents(discount, cur)}</div>
+                      </div>
+                    ) : (
+                      formatCents(lineTotal, cur)
+                    )}
                   </TableCell>
                   <TableCell>
                     {item.inventoryItem.trackingMode === "SERIALIZED" && (
@@ -347,8 +394,14 @@ export function KitListClient({
       </div>
 
       {equipmentItems.length > 0 && (
-        <div className="mt-2 text-right text-sm font-semibold text-slate-700">
-          Kit total: {formatCents(kitTotal, projectCurrency)}
+        <div className="mt-2 text-right text-sm space-y-0.5">
+          {kitDiscount > 0 && (
+            <>
+              <div className="text-muted-foreground">Gross: {formatCents(kitGross, projectCurrency)}</div>
+              <div className="text-red-600">Discount: −{formatCents(kitDiscount, projectCurrency)}</div>
+            </>
+          )}
+          <div className="font-semibold text-slate-700">Kit total: {formatCents(kitTotal, projectCurrency)}</div>
         </div>
       )}
 
@@ -507,17 +560,76 @@ export function KitListClient({
                     </FormItem>
                   )}
                 />
+
+                {/* Line discount (percent OR fixed). Disabled when the item is locked. */}
+                <FormField
+                  control={form.control}
+                  name="discountPercent"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount %</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number" min={0} max={100} step={1}
+                          placeholder="e.g. 15"
+                          disabled={itemLocked || !!watchedDiscFixed}
+                          value={field.value != null ? Math.round(Number(field.value) * 100) : ""}
+                          onChange={(e) =>
+                            field.onChange(e.target.value === "" ? null : Number(e.target.value) / 100)
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="discountFixed"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount fixed (cents)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number" min={0}
+                          placeholder="e.g. 5000 = $50"
+                          disabled={itemLocked || !!watchedDiscPct}
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(e.target.value === "" ? null : Number(e.target.value))
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              {/* Live curve-based total preview */}
-              <div className="flex items-center justify-between rounded-md bg-slate-50 border px-3 py-2 text-sm">
-                <span className="text-muted-foreground">
-                  Line total
-                  {watchedRateType !== "FLAT" && previewTiers ? " (curve applied)" : ""}
-                </span>
-                <span className="font-semibold tabular-nums">
-                  {formatCents(previewTotal, projectCurrency)}
-                </span>
+              {itemLocked && (
+                <p className="text-xs text-amber-600">
+                  This item is locked from discounts (consumable).
+                </p>
+              )}
+
+              {/* Live curve + discount preview */}
+              <div className="rounded-md bg-slate-50 border px-3 py-2 text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    Gross{watchedRateType !== "FLAT" && previewTiers ? " (curve applied)" : ""}
+                  </span>
+                  <span className="tabular-nums">{formatCents(previewGross, projectCurrency)}</span>
+                </div>
+                {previewDiscount > 0 && (
+                  <div className="flex items-center justify-between text-red-600">
+                    <span>Discount</span>
+                    <span className="tabular-nums">−{formatCents(previewDiscount, projectCurrency)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between font-semibold border-t pt-1">
+                  <span>Line total</span>
+                  <span className="tabular-nums">{formatCents(previewTotal, projectCurrency)}</span>
+                </div>
               </div>
 
               <DialogFooter>

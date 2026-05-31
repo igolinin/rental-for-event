@@ -5,6 +5,7 @@ import { inventoryItemSchema, inventoryItemSchemaRefined } from "@/schemas/inven
 import { clientSchema } from "@/schemas/clients";
 import { invoiceSchema, paymentSchema } from "@/schemas/invoices";
 import { pricingProfileSchema } from "@/schemas/pricing";
+import { equipmentItemSchema } from "@/schemas/projects";
 
 const BASE_PROJECT = {
   name: "Test Event",
@@ -368,5 +369,27 @@ describe("pricingProfileSchema", () => {
 
   it("rejects missing name", () => {
     expect(pricingProfileSchema.safeParse({ ...BASE, name: "" }).success).toBe(false);
+  });
+});
+
+describe("equipmentItemSchema — discounts", () => {
+  const BASE = { inventoryItemId: "item-1", quantityNeeded: 1 };
+
+  it("accepts a percentage discount", () => {
+    expect(equipmentItemSchema.safeParse({ ...BASE, discountPercent: 0.15 }).success).toBe(true);
+  });
+
+  it("accepts a fixed discount", () => {
+    expect(equipmentItemSchema.safeParse({ ...BASE, discountFixed: 500 }).success).toBe(true);
+  });
+
+  it("rejects both percent and fixed set together", () => {
+    expect(
+      equipmentItemSchema.safeParse({ ...BASE, discountPercent: 0.1, discountFixed: 500 }).success
+    ).toBe(false);
+  });
+
+  it("rejects percent above 1", () => {
+    expect(equipmentItemSchema.safeParse({ ...BASE, discountPercent: 1.5 }).success).toBe(false);
   });
 });

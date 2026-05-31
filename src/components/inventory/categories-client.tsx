@@ -29,11 +29,13 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   createCategory,
   updateCategory,
@@ -53,6 +55,7 @@ const catFormSchema = z.object({
     .optional()
     .or(z.literal("")),
   sortOrder: z.coerce.number().int().default(0),
+  defaultNoDiscount: z.boolean().default(false),
 });
 
 const subCatFormSchema = z.object({
@@ -72,7 +75,7 @@ export function CategoriesClient({ categories }: CategoriesClientProps) {
 
   const catForm = useForm<z.infer<typeof catFormSchema>>({
     resolver: zodResolver(catFormSchema),
-    defaultValues: { name: "", color: "", sortOrder: 0 },
+    defaultValues: { name: "", color: "", sortOrder: 0, defaultNoDiscount: false },
   });
 
   const subCatForm = useForm<z.infer<typeof subCatFormSchema>>({
@@ -81,7 +84,7 @@ export function CategoriesClient({ categories }: CategoriesClientProps) {
   });
 
   function openNewCategory() {
-    catForm.reset({ name: "", color: "", sortOrder: categories.length });
+    catForm.reset({ name: "", color: "", sortOrder: categories.length, defaultNoDiscount: false });
     setEditingCat(null);
     setCatDialogOpen(true);
   }
@@ -91,6 +94,7 @@ export function CategoriesClient({ categories }: CategoriesClientProps) {
       name: cat.name,
       color: cat.color ?? "",
       sortOrder: cat.sortOrder,
+      defaultNoDiscount: (cat as { defaultNoDiscount?: boolean }).defaultNoDiscount ?? false,
     });
     setEditingCat(cat);
     setCatDialogOpen(true);
@@ -320,6 +324,23 @@ export function CategoriesClient({ categories }: CategoriesClientProps) {
                       <Input type="number" {...field} />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={catForm.control}
+                name="defaultNoDiscount"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start gap-3 rounded-md border p-3">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <div className="space-y-0.5 leading-none">
+                      <FormLabel>New items default to no-discount</FormLabel>
+                      <FormDescription>
+                        Items created in this category are locked from discounts by default (e.g. consumables).
+                      </FormDescription>
+                    </div>
                   </FormItem>
                 )}
               />

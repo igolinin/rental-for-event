@@ -36,9 +36,9 @@ export async function createCategory(data: unknown) {
   const parsed = categorySchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
-  const { name, description, color, sortOrder } = parsed.data;
+  const { name, description, color, sortOrder, defaultNoDiscount } = parsed.data;
   const result = await safeDb(
-    prisma.inventoryCategory.create({ data: { name, slug: slugify(name), description, color, sortOrder } })
+    prisma.inventoryCategory.create({ data: { name, slug: slugify(name), description, color, sortOrder, defaultNoDiscount } })
   );
   if (result.isErr()) return { error: result.error };
   await logAudit({ entityType: "InventoryCategory", entityId: result.value.id, entityLabel: name, action: "CREATE", userId: session!.user.id });
@@ -55,9 +55,9 @@ export async function updateCategory(id: string, data: unknown) {
   const parsed = categorySchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
-  const { name, description, color, sortOrder } = parsed.data;
+  const { name, description, color, sortOrder, defaultNoDiscount } = parsed.data;
   const result = await safeDb(
-    prisma.inventoryCategory.update({ where: { id }, data: { name, slug: slugify(name), description, color, sortOrder } })
+    prisma.inventoryCategory.update({ where: { id }, data: { name, slug: slugify(name), description, color, sortOrder, defaultNoDiscount } })
   );
   if (result.isErr()) return { error: result.error };
   await logAudit({ entityType: "InventoryCategory", entityId: id, entityLabel: name, action: "UPDATE", userId: session!.user.id });
@@ -139,6 +139,16 @@ export async function createInventoryItem(data: unknown) {
     if (priceDenied) return { error: "Setting prices requires elevated permissions." };
   }
 
+  // New items inherit the category's no-discount default unless explicitly set.
+  let noDiscount = d.noDiscount;
+  if (!noDiscount) {
+    const cat = await prisma.inventoryCategory.findUnique({
+      where: { id: d.categoryId },
+      select: { defaultNoDiscount: true },
+    });
+    if (cat?.defaultNoDiscount) noDiscount = true;
+  }
+
   const refCode = generateRefCode("INV");
   const result = await safeDb(
     prisma.inventoryItem.create({
@@ -155,6 +165,7 @@ export async function createInventoryItem(data: unknown) {
         replacementCostAmount: d.replacementCostAmount,
         replacementCostCurrency: d.replacementCostCurrency,
         pricingProfileId: d.pricingProfileId || null,
+        noDiscount,
         notes: d.notes,
         isActive: d.isActive,
       },
@@ -204,6 +215,7 @@ export async function updateInventoryItem(id: string, data: unknown) {
         replacementCostAmount: d.replacementCostAmount,
         replacementCostCurrency: d.replacementCostCurrency,
         pricingProfileId: d.pricingProfileId || null,
+        noDiscount: d.noDiscount,
         notes: d.notes,
         isActive: d.isActive,
       },

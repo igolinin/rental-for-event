@@ -56,6 +56,7 @@ export default async function EditInventoryItemPage({ params }: PageProps) {
             replacementCostAmount: item.replacementCostAmount ?? undefined,
             replacementCostCurrency: item.replacementCostCurrency,
             pricingProfileId: item.pricingProfileId ?? "",
+            noDiscount: item.noDiscount,
             notes: item.notes ?? "",
             isActive: item.isActive,
           }}

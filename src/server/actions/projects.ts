@@ -14,6 +14,7 @@ import {
   projectExpenseSchema,
   subRentalSchema,
   subRentalItemSchema,
+  categoryDiscountSchema,
 } from "@/schemas/projects";
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
@@ -66,6 +67,13 @@ export async function updateProject(id: string, data: unknown) {
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
   const d = parsed.data;
+
+  // Setting a project discount requires elevated pricing permission.
+  if (d.discountPercent || d.discountFixed) {
+    const priceDenied = await requirePermission(session, "INVENTORY_PRICING", "MANAGE");
+    if (priceDenied) return { error: "Setting discounts requires elevated permissions." };
+  }
+
   const result = await safeDb(
     prisma.project.update({
       where: { id },
@@ -84,6 +92,8 @@ export async function updateProject(id: string, data: unknown) {
         currencyCode: d.currencyCode,
         taxRate: d.taxRate,
         depositAmount: d.depositAmount,
+        discountPercent: d.discountPercent ?? null,
+        discountFixed: d.discountFixed ?? null,
         notes: d.notes,
         internalNotes: d.internalNotes,
       },
@@ -93,6 +103,76 @@ export async function updateProject(id: string, data: unknown) {
   await logAudit({ entityType: "Project", entityId: id, action: "UPDATE", userId: session?.user?.id });
   revalidatePath("/dashboard/projects");
   revalidatePath(`/dashboard/projects/${id}`);
+  return { success: true };
+}
+
+// ─── Discounts ────────────────────────────────────────────────────────────────
+
+export async function setProjectDiscount(
+  projectId: string,
+  percent: number | null,
+  fixed: number | null
+) {
+  const session = await auth();
+  const denied = await requirePermission(session, "INVENTORY_PRICING", "MANAGE");
+  if (denied) return denied;
+
+  if (percent != null && fixed != null) {
+    return { error: "Set either a percentage or a fixed discount, not both." };
+  }
+  if (percent != null && (percent < 0 || percent > 1)) {
+    return { error: "Percentage must be between 0 and 100%." };
+  }
+
+  const result = await safeDb(
+    prisma.project.update({
+      where: { id: projectId },
+      data: { discountPercent: percent, discountFixed: fixed },
+    })
+  );
+  if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Project", entityId: projectId, action: "UPDATE", userId: session?.user?.id, meta: { projectDiscount: { percent, fixed } } });
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  return { success: true };
+}
+
+export async function setCategoryDiscount(
+  projectId: string,
+  data: unknown
+) {
+  const session = await auth();
+  const denied = await requirePermission(session, "INVENTORY_PRICING", "MANAGE");
+  if (denied) return denied;
+
+  const parsed = categoryDiscountSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+  const d = parsed.data;
+
+  // No discount values → remove any existing row
+  if (!d.discountPercent && !d.discountFixed) {
+    await safeDb(
+      prisma.projectCategoryDiscount.deleteMany({
+        where: { projectId, categoryId: d.categoryId },
+      })
+    );
+    revalidatePath(`/dashboard/projects/${projectId}`);
+    return { success: true };
+  }
+
+  const existing = await prisma.projectCategoryDiscount.findFirst({
+    where: { projectId, categoryId: d.categoryId },
+  });
+  const result = existing
+    ? await safeDb(prisma.projectCategoryDiscount.update({
+        where: { id: existing.id },
+        data: { discountPercent: d.discountPercent ?? null, discountFixed: d.discountFixed ?? null },
+      }))
+    : await safeDb(prisma.projectCategoryDiscount.create({
+        data: { projectId, categoryId: d.categoryId, discountPercent: d.discountPercent ?? null, discountFixed: d.discountFixed ?? null },
+      }));
+  if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Project", entityId: projectId, action: "UPDATE", userId: session?.user?.id, meta: { categoryDiscount: d.categoryId } });
+  revalidatePath(`/dashboard/projects/${projectId}`);
   return { success: true };
 }
 
@@ -209,6 +289,12 @@ export async function addEquipmentItem(projectId: string, data: unknown) {
     return { error: `Only ${available} unit(s) available for that date range.` };
   }
 
+  // Granting a line discount requires elevated pricing permission.
+  if (d.discountPercent || d.discountFixed) {
+    const priceDenied = await requirePermission(session, "INVENTORY_PRICING", "MANAGE");
+    if (priceDenied) return { error: "Setting discounts requires elevated permissions." };
+  }
+
   const maxSortResult = await safeDb(
     prisma.projectEquipmentItem.aggregate({ where: { projectId }, _max: { sortOrder: true } })
   );
@@ -226,6 +312,8 @@ export async function addEquipmentItem(projectId: string, data: unknown) {
         rateType: d.rateType,
         rateDays: d.rateDays,
         pricingProfileId: d.pricingProfileId || null,
+        discountPercent: d.discountPercent ?? null,
+        discountFixed: d.discountFixed ?? null,
         description: d.description,
         notes: d.notes,
         sortOrder,
@@ -254,10 +342,19 @@ export async function removeEquipmentItem(lineItemId: string, projectId: string)
 }
 
 export async function updateEquipmentItem(lineItemId: string, projectId: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "PROJECTS", "UPDATE");
+  if (denied) return denied;
+
   const parsed = equipmentItemSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
   const d = parsed.data;
+
+  if (d.discountPercent || d.discountFixed) {
+    const priceDenied = await requirePermission(session, "INVENTORY_PRICING", "MANAGE");
+    if (priceDenied) return { error: "Setting discounts requires elevated permissions." };
+  }
 
   const projectResult = await safeDb(
     prisma.project.findUnique({ where: { id: projectId }, select: { startAt: true, endAt: true } })
@@ -285,6 +382,8 @@ export async function updateEquipmentItem(lineItemId: string, projectId: string,
         rateType: d.rateType,
         rateDays: d.rateDays,
         pricingProfileId: d.pricingProfileId || null,
+        discountPercent: d.discountPercent ?? null,
+        discountFixed: d.discountFixed ?? null,
         description: d.description,
         notes: d.notes,
       },

@@ -17,7 +17,7 @@ export default async function NewInvoicePage({ searchParams }: PageProps) {
 
   // Pre-populate from project kit list if projectId supplied
   let defaultValues: Record<string, unknown> | undefined;
-  let resolvedProjectId = projectId;
+  const resolvedProjectId = projectId;
   let resolvedClientId: string | undefined;
 
   if (projectId) {
@@ -31,6 +31,7 @@ export default async function NewInvoicePage({ searchParams }: PageProps) {
         projectId,
         clientId: project.clientId,
         currencyCode: built.currencyCode,
+        discountAmount: built.discountAmount,
         notes: `Invoice for project: ${project.name}`,
         lineItems: built.lineItems.length
           ? built.lineItems

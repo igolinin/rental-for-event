@@ -15,6 +15,8 @@ export const projectSchema = z.object({
   currencyCode: z.string().length(3).default("USD"),
   taxRate: z.coerce.number().min(0).max(1).optional().nullable(),
   depositAmount: z.coerce.number().int().min(0).optional().nullable(),
+  discountPercent: z.coerce.number().min(0).max(1).optional().nullable(),
+  discountFixed: z.coerce.number().int().min(0).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   internalNotes: z.string().max(2000).optional().nullable(),
 }).refine((d) => new Date(d.endAt) >= new Date(d.startAt), {
@@ -26,6 +28,9 @@ export const projectSchema = z.object({
 }).refine((d) => !d.loadOutAt || new Date(d.loadOutAt) >= new Date(d.endAt), {
   message: "Load-out date must be on or after end date",
   path: ["loadOutAt"],
+}).refine((d) => !(d.discountPercent && d.discountFixed), {
+  message: "Set either a percentage or a fixed discount, not both",
+  path: ["discountFixed"],
 });
 
 export type ProjectFormValues = z.infer<typeof projectSchema>;
@@ -38,11 +43,27 @@ export const equipmentItemSchema = z.object({
   rateType: z.enum(["DAILY", "WEEKLY", "FLAT"]).default("DAILY"),
   rateDays: z.coerce.number().int().min(1).default(1),
   pricingProfileId: z.string().optional().nullable(),
+  discountPercent: z.coerce.number().min(0).max(1).optional().nullable(),
+  discountFixed: z.coerce.number().int().min(0).optional().nullable(),
   description: z.string().max(200).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
+}).refine((d) => !(d.discountPercent && d.discountFixed), {
+  message: "Set either a percentage or a fixed discount, not both",
+  path: ["discountFixed"],
 });
 
 export type EquipmentItemFormValues = z.infer<typeof equipmentItemSchema>;
+
+export const categoryDiscountSchema = z.object({
+  categoryId: z.string().min(1, "Category is required"),
+  discountPercent: z.coerce.number().min(0).max(1).optional().nullable(),
+  discountFixed: z.coerce.number().int().min(0).optional().nullable(),
+}).refine((d) => !(d.discountPercent && d.discountFixed), {
+  message: "Set either a percentage or a fixed discount, not both",
+  path: ["discountFixed"],
+});
+
+export type CategoryDiscountFormValues = z.infer<typeof categoryDiscountSchema>;
 
 export const projectExpenseSchema = z.object({
   description: z.string().min(1, "Description is required").max(200),

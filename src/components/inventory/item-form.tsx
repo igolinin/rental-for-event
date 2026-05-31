@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -56,6 +57,7 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel, p
       replacementCostAmount: undefined,
       replacementCostCurrency: "USD",
       pricingProfileId: "",
+      noDiscount: false,
       notes: "",
       isActive: true,
       ...defaultValues,
@@ -72,8 +74,7 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel, p
     if (!defaultValues?.categoryId || defaultValues.categoryId !== watchedCategory) {
       form.setValue("subCategoryId", "");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedCategory]);
+  }, [watchedCategory, defaultValues?.categoryId, form]);
 
   function applyAiSuggestion(s: ItemSuggestion) {
     if (s.name) form.setValue("name", s.name);
@@ -324,6 +325,25 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel, p
                 </Select>
                 <FormDescription>Duration-based rate card applied when this item is rented.</FormDescription>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* No-discount lock */}
+          <FormField
+            control={form.control}
+            name="noDiscount"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start gap-3 rounded-md border p-4 sm:col-span-2">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+                <div className="space-y-0.5 leading-none">
+                  <FormLabel>No discount (locked)</FormLabel>
+                  <FormDescription>
+                    Exempt this item from all discounts (item, category, or project). Use for consumables.
+                  </FormDescription>
+                </div>
               </FormItem>
             )}
           />

@@ -7,6 +7,7 @@ export const categorySchema = z.object({
   description: z.string().max(500).optional().nullable(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a hex colour e.g. #3B82F6").optional().nullable(),
   sortOrder: z.coerce.number().int().default(0),
+  defaultNoDiscount: z.boolean().default(false),
 });
 
 export const subCategorySchema = z.object({
@@ -29,6 +30,7 @@ export const inventoryItemSchema = z.object({
   replacementCostAmount: z.coerce.number().int().min(0).optional().nullable(),
   replacementCostCurrency: z.string().length(3).default("USD"),
   pricingProfileId: z.string().optional().nullable(),
+  noDiscount: z.boolean().default(false),
   notes: z.string().max(1000).optional().nullable(),
   isActive: z.boolean().default(true),
 });

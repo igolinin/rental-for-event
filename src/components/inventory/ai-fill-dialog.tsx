@@ -113,7 +113,6 @@ export function AiFillDialog({ providerLabel, onFilled }: AiFillDialogProps) {
                 onChange={handleFileChange}
               />
               {preview && (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview} alt="Preview" className="mt-2 rounded-md max-h-40 object-contain mx-auto border" />
               )}
             </div>

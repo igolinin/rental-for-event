@@ -641,7 +641,22 @@ New API route `POST /api/ai/fill-item`:
 - [x] `computeProjectPnL` and kit-list totals use the curve; backward compatible (no profile = legacy linear math).
 - [x] Invoice generation from a project (`buildInvoiceLinesFromProject`) pre-fills line items with curve totals; still editable.
 - [x] All pricing actions permission-gated + audit-logged (ties into Phase 16).
-- [x] Tests: `src/lib/__tests__/pricing.test.ts` (curve lookup, FLAT/linear, monotonicity at breakpoints, resolveTiers) + pricing schema validation cases. 191 tests total.
+- [x] Tests: `src/lib/__tests__/pricing.test.ts` (curve lookup, FLAT/linear, monotonicity at breakpoints, resolveTiers) + pricing schema validation cases.
+
+---
+
+## Phase 18 — Flexible Discount System ✅ COMPLETE
+
+**Goal:** Negotiated discounts at line / category / project scope (percent or fixed), with a no-discount lock for consumables.
+
+- [x] Schema (`add_discounts`): `discountPercent`/`discountFixed` on Project & ProjectEquipmentItem; `noDiscount` on InventoryItem; `defaultNoDiscount` on InventoryCategory; new `ProjectCategoryDiscount` join.
+- [x] `src/lib/discounts.ts`: `computeLineDiscounts` — most-specific-wins (line → category → project), locks respected, fixed amounts distributed proportionally; `hasDiscount`.
+- [x] Discounts feed `computeProjectPnL` (`equipmentDiscount`, `netEquipmentRevenue`) and `buildInvoiceLinesFromProject` (sets invoice `discountAmount` from gross lines).
+- [x] Setting any discount value requires `INVENTORY_PRICING:MANAGE` (mirrors price-change guard); audit-logged. New `setProjectDiscount` / `setCategoryDiscount` actions.
+- [x] New items inherit category `defaultNoDiscount`.
+- [x] UI: line discount control + live gross/discount/net preview in kit dialog; net display + footer in kit table; `DiscountsClient` panel for project + per-category discounts; P&L "Equipment discount" line; `noDiscount` checkbox on item form; `defaultNoDiscount` checkbox on category manager.
+- [x] Backward compatible: no discounts → totals unchanged.
+- [x] Tests: `src/lib/__tests__/discounts.test.ts` (per-line %/fixed, most-specific-wins, lock, proportional fixed distribution, mixed levels, total reconciliation) + equipment discount schema validation. **210 tests total.**
 
 ---
 
@@ -673,7 +688,7 @@ New API route `POST /api/ai/fill-item`:
 | 5 | Invoicing + PDF | ✅ Complete |
 | 6 | Reporting + Dashboard | ✅ Complete (PDF export added in Phase 11) |
 | 7 | Polish + Error Handling | ✅ Complete (neverthrow + validation in Phase 10) |
-| 8 | Test Infrastructure | ✅ Complete (now 191 tests across 9 files) |
+| 8 | Test Infrastructure | ✅ Complete (now 210 tests across 10 files) |
 | 9 | UX Completions | ✅ Complete |
 | 10 | Robustness | ✅ Complete |
 | 11 | PDF Reports | ✅ Complete |
@@ -683,3 +698,4 @@ New API route `POST /api/ai/fill-item`:
 | **15** | **LLM-Powered Item Details** | **✅ Complete** (Claude / OpenAI / DeepSeek) |
 | **16** | **Governance & Audit Trail** | **✅ Complete** |
 | **17** | **Duration-Based Pricing Curves** | **✅ Complete** (rate cards, profiles, invoice prefill) |
+| **18** | **Flexible Discount System** | **✅ Complete** (line/category/project + consumable lock) |

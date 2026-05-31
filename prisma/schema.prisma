@@ -159,16 +159,18 @@ model Warehouse {
 // ============================================================
 
 model InventoryCategory {
-  id            String   @id @default(cuid())
-  name          String   @unique
-  slug          String   @unique
-  description   String?
-  color         String?
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
+  id                String   @id @default(cuid())
+  name              String   @unique
+  slug              String   @unique
+  description       String?
+  color             String?
+  sortOrder         Int      @default(0)
+  defaultNoDiscount Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
-  subCategories InventorySubCategory[]
-  items         InventoryItem[]
+  subCategories     InventorySubCategory[]
+  items             InventoryItem[]
+  projectDiscounts  ProjectCategoryDiscount[]
 }
 
 model InventorySubCategory {
@@ -202,10 +204,11 @@ model InventoryItem {
   replacementCostAmount   Int?
   replacementCostCurrency String @default("USD")
 
-  notes     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  notes      String?
+  isActive   Boolean  @default(true)
+  noDiscount Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   pricingProfileId String?
 
@@ -378,6 +381,8 @@ model Project {
   currencyCode String        @default("USD")
   taxRate      Decimal?      @db.Decimal(5, 4)
   depositAmount Int?
+  discountPercent Decimal?   @db.Decimal(5, 4)
+  discountFixed   Int?
   notes        String?
   internalNotes String?
   createdById  String
@@ -394,6 +399,7 @@ model Project {
   timesheets        Timesheet[]
   phases            ProjectPhase[]
   laborSubcontracts LaborSubcontract[]
+  categoryDiscounts ProjectCategoryDiscount[]
 
   @@index([status])
   @@index([clientId])
@@ -429,6 +435,8 @@ model ProjectEquipmentItem {
   notes           String?
   sortOrder       Int      @default(0)
   pricingProfileId String?
+  discountPercent Decimal? @db.Decimal(5, 4)
+  discountFixed   Int?
 
   project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   inventoryItem  InventoryItem   @relation(fields: [inventoryItemId], references: [id])
@@ -437,6 +445,20 @@ model ProjectEquipmentItem {
 
   @@index([projectId])
   @@index([pricingProfileId])
+}
+
+model ProjectCategoryDiscount {
+  id              String   @id @default(cuid())
+  projectId       String
+  categoryId      String
+  discountPercent Decimal? @db.Decimal(5, 4)
+  discountFixed   Int?
+
+  project  Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category InventoryCategory @relation(fields: [categoryId], references: [id])
+
+  @@unique([projectId, categoryId])
+  @@index([projectId])
 }
 
 enum RateType {

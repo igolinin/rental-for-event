@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { computeLineTotal, resolveTiers } from "@/lib/pricing";
 import { toTiersLite, getDefaultProfile } from "@/server/queries/pricing";
+import { computeLineDiscounts, type DiscountSpec, type DiscountLineInput } from "@/lib/discounts";
+import { toDiscountSpec } from "@/server/queries/projects";
 
 export interface GetInvoicesParams {
   projectId?: string;
@@ -53,6 +55,7 @@ export async function buildInvoiceLinesFromProject(projectId: string) {
       where: { id: projectId },
       include: {
         client: { select: { id: true } },
+        categoryDiscounts: true,
         equipmentItems: {
           include: {
             inventoryItem: {
@@ -70,6 +73,7 @@ export async function buildInvoiceLinesFromProject(projectId: string) {
   if (!project) return null;
   const defaultTiers = toTiersLite(defaultProfile?.tiers);
 
+  const discountLines: DiscountLineInput[] = [];
   const lineItems = project.equipmentItems.map((item, idx) => {
     const tiers = resolveTiers(
       toTiersLite(item.pricingProfile?.tiers),
@@ -83,21 +87,38 @@ export async function buildInvoiceLinesFromProject(projectId: string) {
       tiers,
       item.rateType
     );
+    discountLines.push({
+      id: item.id,
+      lineTotal: total,
+      categoryId: item.inventoryItem.categoryId,
+      locked: item.inventoryItem.noDiscount,
+      lineDiscount: toDiscountSpec(item.discountPercent, item.discountFixed),
+    });
     return {
       description:
         item.description ||
         `${item.inventoryItem.name} — ${item.rateDays} day(s)`,
       quantity: item.quantityNeeded,
-      // unitAmount is per-unit so the form's quantity × unitAmount reproduces the total
+      // unitAmount is per-unit (gross); discounts surface as the invoice-level discount
       unitAmount: item.quantityNeeded > 0 ? Math.round(total / item.quantityNeeded) : total,
       sortOrder: idx,
     };
   });
+
+  // Total discount surfaces as the invoice-level discountAmount (gross lines stay transparent).
+  const categoryDiscounts: Record<string, DiscountSpec> = {};
+  for (const cd of project.categoryDiscounts) {
+    const spec = toDiscountSpec(cd.discountPercent, cd.discountFixed);
+    if (spec) categoryDiscounts[cd.categoryId] = spec;
+  }
+  const projectDiscount = toDiscountSpec(project.discountPercent, project.discountFixed);
+  const discountAmount = computeLineDiscounts(discountLines, categoryDiscounts, projectDiscount).total;
 
   return {
     projectId: project.id,
     clientId: project.clientId,
     currencyCode: project.currencyCode,
     lineItems,
+    discountAmount,
   };
 }

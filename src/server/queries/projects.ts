@@ -1,6 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { computeLineTotal, resolveTiers, type PricingTierLite } from "@/lib/pricing";
 import { toTiersLite } from "@/server/queries/pricing";
+import { computeLineDiscounts, type DiscountSpec, type DiscountLineInput } from "@/lib/discounts";
+
+/** Convert nullable Prisma Decimal/Int discount fields to a DiscountSpec (or null). */
+export function toDiscountSpec(
+  percent: unknown,
+  fixed: number | null | undefined
+): DiscountSpec | null {
+  const p = percent != null ? Number(percent) : null;
+  const f = fixed != null ? fixed : null;
+  if ((p == null || p === 0) && (f == null || f === 0)) return null;
+  return { percent: p, fixed: f };
+}
 
 export interface GetProjectsParams {
   search?: string;
@@ -92,6 +104,7 @@ export async function getProjectById(id: string) {
         include: { items: true },
         orderBy: { createdAt: "asc" },
       },
+      categoryDiscounts: true,
       expenses: { orderBy: { date: "desc" } },
       timesheets: {
         where: { status: "APPROVED" },
@@ -122,20 +135,38 @@ export function computeProjectPnL(
 ) {
   // Equipment revenue: dailyRate × curveMultiplier(duration) × quantity,
   // resolving the curve line → item → default. No profile → linear (legacy) math.
+  const discountLines: DiscountLineInput[] = [];
   const equipmentRevenue = project.equipmentItems.reduce((sum, item) => {
     const tiers = resolveTiers(
       toTiersLite(item.pricingProfile?.tiers),
       toTiersLite(item.inventoryItem.pricingProfile?.tiers),
       defaultTiers
     );
-    return sum + computeLineTotal(
+    const lineTotal = computeLineTotal(
       item.unitRateAmount ?? 0,
       item.rateDays,
       item.quantityNeeded,
       tiers,
       item.rateType
     );
+    discountLines.push({
+      id: item.id,
+      lineTotal,
+      categoryId: item.inventoryItem.categoryId,
+      locked: item.inventoryItem.noDiscount,
+      lineDiscount: toDiscountSpec(item.discountPercent, item.discountFixed),
+    });
+    return sum + lineTotal;
   }, 0);
+
+  // Discounts: most-specific wins (line → category → project), locks respected.
+  const categoryDiscounts: Record<string, DiscountSpec> = {};
+  for (const cd of project.categoryDiscounts) {
+    const spec = toDiscountSpec(cd.discountPercent, cd.discountFixed);
+    if (spec) categoryDiscounts[cd.categoryId] = spec;
+  }
+  const projectDiscount = toDiscountSpec(project.discountPercent, project.discountFixed);
+  const equipmentDiscount = computeLineDiscounts(discountLines, categoryDiscounts, projectDiscount).total;
 
   // Sub-rental costs
   const subRentalCosts = project.subRentals
@@ -165,13 +196,16 @@ export function computeProjectPnL(
       return sum + lsc.dailyRateAmount * lsc.quantity * days;
     }, 0);
 
-  const grossRevenue = equipmentRevenue;
+  const netEquipmentRevenue = equipmentRevenue - equipmentDiscount;
+  const grossRevenue = netEquipmentRevenue;
   const totalCosts = subRentalCosts + expenseTotal + laborCosts + laborSubcontractCosts;
   const grossMargin = grossRevenue - totalCosts;
   const marginPct = grossRevenue > 0 ? (grossMargin / grossRevenue) * 100 : 0;
 
   return {
     equipmentRevenue,
+    equipmentDiscount,
+    netEquipmentRevenue,
     subRentalCosts,
     expenseTotal,
     laborCosts,

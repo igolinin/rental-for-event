@@ -1,10 +1,11 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getProjectById, computeProjectPnL } from "@/server/queries/projects";
+import { getProjectById, computeProjectPnL, toDiscountSpec } from "@/server/queries/projects";
 import { getItems } from "@/server/queries/inventory";
 import { getCrewForSelect } from "@/server/queries/crew";
 import { getPricingProfiles, getDefaultProfile, toTiersLite } from "@/server/queries/pricing";
 import type { PricingTierLite } from "@/lib/pricing";
+import type { DiscountSpec } from "@/lib/discounts";
 import { ProjectDetailClient } from "@/components/projects/project-detail-client";
 
 interface PageProps {
@@ -39,6 +40,19 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     if (lite) profileTiers[p.id] = lite;
   }
 
+  // Plain discount specs for the client (avoid passing Prisma Decimals)
+  const projectDiscount = toDiscountSpec(project.discountPercent, project.discountFixed);
+  const categoryDiscounts: Record<string, DiscountSpec> = {};
+  for (const cd of project.categoryDiscounts) {
+    const spec = toDiscountSpec(cd.discountPercent, cd.discountFixed);
+    if (spec) categoryDiscounts[cd.categoryId] = spec;
+  }
+
+  // Categories present in the kit (for the discount manager UI)
+  const kitCategories = Array.from(
+    new Map(project.equipmentItems.map((i) => [i.inventoryItem.categoryId, i.inventoryItem.category.name])).entries()
+  ).map(([id, name]) => ({ id, name }));
+
   return (
     <ProjectDetailClient
       project={project}
@@ -48,6 +62,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       pricingProfiles={profiles.map((p) => ({ id: p.id, name: p.name, isDefault: p.isDefault }))}
       profileTiers={profileTiers}
       defaultProfileId={defaultProfile?.id ?? null}
+      projectDiscount={projectDiscount}
+      categoryDiscounts={categoryDiscounts}
+      kitCategories={kitCategories}
     />
   );
 }
