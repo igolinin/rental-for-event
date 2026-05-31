@@ -657,7 +657,7 @@ New API route `POST /api/ai/fill-item`:
 | 5 | Invoicing + PDF | ✅ Complete |
 | 6 | Reporting + Dashboard | ✅ Complete (PDF export added in Phase 11) |
 | 7 | Polish + Error Handling | ✅ Complete (neverthrow + validation in Phase 10) |
-| 8 | Test Infrastructure | ✅ Complete (109 tests, 87% coverage) |
+| 8 | Test Infrastructure | ✅ Complete (now 166 tests across 8 files) |
 | 9 | UX Completions | ✅ Complete |
 | 10 | Robustness | ✅ Complete |
 | 11 | PDF Reports | ✅ Complete |
