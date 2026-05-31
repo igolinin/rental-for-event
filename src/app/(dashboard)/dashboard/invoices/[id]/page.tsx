@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getInvoiceById } from "@/server/queries/invoices";
+import { serializeDecimals } from "@/lib/serialize";
 import { InvoiceDetailClient } from "@/components/invoices/invoice-detail-client";
 
 interface PageProps {
@@ -19,5 +20,5 @@ export default async function InvoicePage({ params }: PageProps) {
   const invoice = await getInvoiceById(id);
   if (!invoice) notFound();
 
-  return <InvoiceDetailClient invoice={invoice} />;
+  return <InvoiceDetailClient invoice={serializeDecimals(invoice)} />;
 }

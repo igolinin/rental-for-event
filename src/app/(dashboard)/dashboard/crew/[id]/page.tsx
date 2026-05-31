@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCrewMemberById } from "@/server/queries/crew";
+import { serializeDecimals } from "@/lib/serialize";
 import { CrewDetailClient } from "@/components/crew/crew-detail-client";
 
 interface PageProps {
@@ -19,5 +20,5 @@ export default async function CrewMemberPage({ params }: PageProps) {
   const member = await getCrewMemberById(id);
   if (!member) notFound();
 
-  return <CrewDetailClient member={member} />;
+  return <CrewDetailClient member={serializeDecimals(member)} />;
 }

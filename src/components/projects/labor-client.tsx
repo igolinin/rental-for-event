@@ -360,10 +360,10 @@ export function LaborClient({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Phase (optional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <Select onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)} value={field.value || "__none__"}>
                           <FormControl><SelectTrigger><SelectValue placeholder="No specific phase" /></SelectTrigger></FormControl>
                           <SelectContent>
-                            <SelectItem value="">No specific phase</SelectItem>
+                            <SelectItem value="__none__">No specific phase</SelectItem>
                             {phases.map((p) => (
                               <SelectItem key={p.id} value={p.id}>
                                 {phaseDisplayName(p.name, p.customLabel)}

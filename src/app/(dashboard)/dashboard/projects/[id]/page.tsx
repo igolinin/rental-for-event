@@ -6,6 +6,7 @@ import { getCrewForSelect } from "@/server/queries/crew";
 import { getPricingProfiles, getDefaultProfile, toTiersLite } from "@/server/queries/pricing";
 import type { PricingTierLite } from "@/lib/pricing";
 import type { DiscountSpec } from "@/lib/discounts";
+import { serializeDecimals } from "@/lib/serialize";
 import { ProjectDetailClient } from "@/components/projects/project-detail-client";
 
 interface PageProps {
@@ -55,7 +56,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   return (
     <ProjectDetailClient
-      project={project}
+      project={serializeDecimals(project)}
       pnl={pnl}
       inventoryItems={inventoryItems}
       crewForSelect={crewForSelect}

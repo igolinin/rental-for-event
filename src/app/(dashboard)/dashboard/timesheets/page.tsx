@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { getTimesheets } from "@/server/queries/crew";
+import { serializeDecimals } from "@/lib/serialize";
 import { TimesheetsClient } from "@/components/crew/timesheets-client";
 
 export const metadata: Metadata = { title: "Timesheets" };
@@ -58,7 +59,7 @@ export default async function TimesheetsPage({ searchParams }: PageProps) {
         )}
       </form>
 
-      <TimesheetsClient timesheets={timesheets} />
+      <TimesheetsClient timesheets={serializeDecimals(timesheets)} />
     </div>
   );
 }

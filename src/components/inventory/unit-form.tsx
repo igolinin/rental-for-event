@@ -159,14 +159,14 @@ export function UnitFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Warehouse</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)} value={field.value || "__none__"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="No warehouse assigned" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">
+                          <SelectItem value="__none__">
                             <span className="flex items-center gap-1.5 text-muted-foreground">
                               <MapPin className="h-3.5 w-3.5" />
                               No warehouse

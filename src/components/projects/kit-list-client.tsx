@@ -541,14 +541,14 @@ export function KitListClient({
                   render={({ field }) => (
                     <FormItem className="col-span-2">
                       <FormLabel>Pricing curve</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)} value={field.value || "__none__"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Inherit from item / default" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Inherit from item / default</SelectItem>
+                          <SelectItem value="__none__">Inherit from item / default</SelectItem>
                           {pricingProfiles.map((p) => (
                             <SelectItem key={p.id} value={p.id}>
                               {p.name}{p.isDefault ? " (default)" : ""}

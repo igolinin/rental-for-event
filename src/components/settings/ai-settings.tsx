@@ -84,10 +84,10 @@ export function AiSettings({ current }: AiSettingsProps) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-medium mb-1.5 block">Provider</label>
-          <Select onValueChange={(v) => { setProvider(v); setTestResult(null); }} value={provider}>
+          <Select onValueChange={(v) => { setProvider(v === "__none__" ? "" : v); setTestResult(null); }} value={provider || "__none__"}>
             <SelectTrigger><SelectValue placeholder="Disabled" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Disabled</SelectItem>
+              <SelectItem value="__none__">Disabled</SelectItem>
               {Object.entries(PROVIDER_LABELS).map(([k, v]) => (
                 <SelectItem key={k} value={k}>{v.label}</SelectItem>
               ))}

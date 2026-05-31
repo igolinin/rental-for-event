@@ -130,8 +130,8 @@ export function MaintenanceLogFormDialog({
                     <FormItem>
                       <FormLabel>Unit (optional)</FormLabel>
                       <Select
-                        onValueChange={field.onChange}
-                        value={field.value ?? ""}
+                        onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                        value={field.value || "__none__"}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -139,7 +139,7 @@ export function MaintenanceLogFormDialog({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">All units</SelectItem>
+                          <SelectItem value="__none__">All units</SelectItem>
                           {serializedUnits.map((u) => (
                             <SelectItem key={u.id} value={u.id}>
                               {u.serialNumber}

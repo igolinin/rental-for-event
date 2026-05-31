@@ -188,8 +188,8 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel, p
               <FormItem>
                 <FormLabel>Sub-category</FormLabel>
                 <Select
-                  onValueChange={field.onChange}
-                  value={field.value ?? ""}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                  value={field.value || "__none__"}
                   disabled={!selectedCategory?.subCategories.length}
                 >
                   <FormControl>
@@ -198,7 +198,7 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel, p
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {selectedCategory?.subCategories.map((sub) => (
                       <SelectItem key={sub.id} value={sub.id}>
                         {sub.name}
@@ -308,14 +308,14 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel, p
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Pricing curve</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <Select onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)} value={field.value || "__none__"}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Use system default" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Use system default</SelectItem>
+                    <SelectItem value="__none__">Use system default</SelectItem>
                     {pricingProfiles.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.name}{p.isDefault ? " (default)" : ""}
