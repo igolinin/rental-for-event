@@ -37,6 +37,7 @@ export const equipmentItemSchema = z.object({
   unitRateCurrency: z.string().length(3).default("USD"),
   rateType: z.enum(["DAILY", "WEEKLY", "FLAT"]).default("DAILY"),
   rateDays: z.coerce.number().int().min(1).default(1),
+  pricingProfileId: z.string().optional().nullable(),
   description: z.string().max(200).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
 });

@@ -207,8 +207,11 @@ model InventoryItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  pricingProfileId String?
+
   category       InventoryCategory     @relation(fields: [categoryId], references: [id])
   subCategory    InventorySubCategory? @relation(fields: [subCategoryId], references: [id])
+  pricingProfile PricingProfile?       @relation(fields: [pricingProfileId], references: [id])
   serializedUnits  SerializedUnit[]
   projectLineItems ProjectEquipmentItem[]
   maintenanceLogs  MaintenanceLog[]
@@ -220,6 +223,37 @@ model InventoryItem {
   @@index([categoryId])
   @@index([trackingMode])
   @@index([isActive])
+  @@index([pricingProfileId])
+}
+
+// ============================================================
+// PRICING PROFILES (duration-based rate cards)
+// ============================================================
+
+model PricingProfile {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isDefault   Boolean  @default(false)
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tiers            PricingTier[]
+  inventoryItems   InventoryItem[]
+  projectEquipment ProjectEquipmentItem[]
+}
+
+model PricingTier {
+  id         String  @id @default(cuid())
+  profileId  String
+  minDays    Int
+  multiplier Decimal @db.Decimal(8, 3)
+
+  profile PricingProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, minDays])
+  @@index([profileId])
 }
 
 model InventoryItemImage {
@@ -394,12 +428,15 @@ model ProjectEquipmentItem {
   description     String?
   notes           String?
   sortOrder       Int      @default(0)
+  pricingProfileId String?
 
-  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  allocations   ProjectEquipmentAllocation[]
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inventoryItem  InventoryItem   @relation(fields: [inventoryItemId], references: [id])
+  pricingProfile PricingProfile? @relation(fields: [pricingProfileId], references: [id])
+  allocations    ProjectEquipmentAllocation[]
 
   @@index([projectId])
+  @@index([pricingProfileId])
 }
 
 enum RateType {

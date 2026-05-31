@@ -60,11 +60,16 @@ function formatCents(cents: number, currency = "USD"): string {
   }).format(cents / 100);
 }
 
+interface PricingProfileLite { id: string; name: string; isDefault: boolean }
+
 interface ProjectDetailClientProps {
   project: NonNullable<ProjectDetail>;
   pnl: ProjectPnL;
   inventoryItems: ItemListEntry[];
   crewForSelect: CrewForSelectEntry[];
+  pricingProfiles: PricingProfileLite[];
+  profileTiers: Record<string, { minDays: number; multiplier: number }[]>;
+  defaultProfileId: string | null;
 }
 
 export function ProjectDetailClient({
@@ -72,6 +77,9 @@ export function ProjectDetailClient({
   pnl,
   inventoryItems,
   crewForSelect,
+  pricingProfiles,
+  profileTiers,
+  defaultProfileId,
 }: ProjectDetailClientProps) {
   const router = useRouter();
   const badge = projectStatusBadge[project.status];
@@ -268,6 +276,9 @@ export function ProjectDetailClient({
             equipmentItems={project.equipmentItems}
             inventoryItems={inventoryItems}
             projectCurrency={project.currencyCode}
+            pricingProfiles={pricingProfiles}
+            profileTiers={profileTiers}
+            defaultProfileId={defaultProfileId}
           />
         </TabsContent>
 

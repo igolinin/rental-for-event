@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { computeLineTotal, resolveTiers, type PricingTierLite } from "@/lib/pricing";
+import { toTiersLite } from "@/server/queries/pricing";
 
 export interface GetProjectsParams {
   search?: string;
@@ -50,8 +52,12 @@ export async function getProjectById(id: string) {
       equipmentItems: {
         include: {
           inventoryItem: {
-            include: { category: true },
+            include: {
+              category: true,
+              pricingProfile: { include: { tiers: { orderBy: { minDays: "asc" } } } },
+            },
           },
+          pricingProfile: { include: { tiers: { orderBy: { minDays: "asc" } } } },
           allocations: {
             include: { serializedUnit: { select: { id: true, serialNumber: true } } },
           },
@@ -110,13 +116,25 @@ export type ProjectDetail = Awaited<ReturnType<typeof getProjectById>>;
 
 // ─── P&L calculation ─────────────────────────────────────────────────────────
 
-export function computeProjectPnL(project: NonNullable<ProjectDetail>) {
-  // Equipment revenue: unitRateAmount * rateDays * quantityNeeded
+export function computeProjectPnL(
+  project: NonNullable<ProjectDetail>,
+  defaultTiers: PricingTierLite[] | null = null
+) {
+  // Equipment revenue: dailyRate × curveMultiplier(duration) × quantity,
+  // resolving the curve line → item → default. No profile → linear (legacy) math.
   const equipmentRevenue = project.equipmentItems.reduce((sum, item) => {
-    const rate = item.unitRateAmount ?? 0;
-    const days = item.rateDays;
-    const qty = item.quantityNeeded;
-    return sum + rate * days * qty;
+    const tiers = resolveTiers(
+      toTiersLite(item.pricingProfile?.tiers),
+      toTiersLite(item.inventoryItem.pricingProfile?.tiers),
+      defaultTiers
+    );
+    return sum + computeLineTotal(
+      item.unitRateAmount ?? 0,
+      item.rateDays,
+      item.quantityNeeded,
+      tiers,
+      item.rateType
+    );
   }, 0);
 
   // Sub-rental costs

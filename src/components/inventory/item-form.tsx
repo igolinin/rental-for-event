@@ -35,9 +35,10 @@ interface ItemFormProps {
   defaultValues?: Partial<InventoryItemFormValues>;
   itemId?: string;
   aiProviderLabel?: string | null;
+  pricingProfiles?: { id: string; name: string; isDefault: boolean }[];
 }
 
-export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel }: ItemFormProps) {
+export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel, pricingProfiles = [] }: ItemFormProps) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
 
@@ -54,6 +55,7 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel }:
       dailyRateCurrency: "USD",
       replacementCostAmount: undefined,
       replacementCostCurrency: "USD",
+      pricingProfileId: "",
       notes: "",
       isActive: true,
       ...defaultValues,
@@ -293,6 +295,34 @@ export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel }:
                     }
                   />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Pricing profile */}
+          <FormField
+            control={form.control}
+            name="pricingProfileId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Pricing curve</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Use system default" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="">Use system default</SelectItem>
+                    {pricingProfiles.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}{p.isDefault ? " (default)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>Duration-based rate card applied when this item is rented.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

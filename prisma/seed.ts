@@ -310,6 +310,30 @@ async function main() {
 
   console.log("✓ Sample crew members seeded");
 
+  // ── Default pricing profile ───────────────────────────────────
+  const existingDefault = await prisma.pricingProfile.findFirst({ where: { name: "Standard" } });
+  if (!existingDefault) {
+    await prisma.pricingProfile.create({
+      data: {
+        name: "Standard",
+        description: "Default duration-based rate card. Longer rentals get a lower effective per-day price.",
+        isDefault: true,
+        isSystem: true,
+        tiers: {
+          create: [
+            { minDays: 1, multiplier: 1.0 },
+            { minDays: 2, multiplier: 1.8 },
+            { minDays: 3, multiplier: 2.5 },
+            { minDays: 7, multiplier: 3.0 },
+            { minDays: 14, multiplier: 5.0 },
+            { minDays: 30, multiplier: 9.0 },
+          ],
+        },
+      },
+    });
+    console.log("✓ Standard pricing profile seeded");
+  }
+
   console.log("\n✅ Database seeded successfully!");
   console.log("\nDefault credentials:");
   console.log("  Admin:   admin@company.com / changeme123");

@@ -55,12 +55,18 @@ import { Plus, Trash2, Tag } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ProjectDetail } from "@/server/queries/projects";
 import type { ItemListEntry } from "@/server/queries/inventory";
+import { computeLineTotal, type PricingTierLite } from "@/lib/pricing";
+
+interface PricingProfileLite { id: string; name: string; isDefault: boolean }
 
 interface KitListClientProps {
   projectId: string;
   equipmentItems: NonNullable<ProjectDetail>["equipmentItems"];
   inventoryItems: ItemListEntry[];
   projectCurrency: string;
+  pricingProfiles: PricingProfileLite[];
+  profileTiers: Record<string, PricingTierLite[]>;
+  defaultProfileId: string | null;
 }
 
 function formatCents(cents: number | null | undefined, currency = "USD"): string {
@@ -86,8 +92,20 @@ export function KitListClient({
   equipmentItems,
   inventoryItems,
   projectCurrency,
+  pricingProfiles,
+  profileTiers,
+  defaultProfileId,
 }: KitListClientProps) {
   const router = useRouter();
+
+  // Resolve the curve tiers for a line: line override → item profile → default.
+  function resolveLineTiers(
+    lineProfileId: string | null | undefined,
+    itemProfileId: string | null | undefined
+  ): PricingTierLite[] | null {
+    const id = lineProfileId || itemProfileId || defaultProfileId;
+    return (id && profileTiers[id]) || null;
+  }
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [availInfo, setAvailInfo] = useState<{ available: number; checked: boolean; loading: boolean }>({
@@ -112,6 +130,7 @@ export function KitListClient({
       unitRateCurrency: projectCurrency,
       rateType: "DAILY",
       rateDays: 1,
+      pricingProfileId: "",
       description: "",
       notes: "",
     },
@@ -119,6 +138,24 @@ export function KitListClient({
 
   const watchedItemId = form.watch("inventoryItemId");
   const selectedInvItem = inventoryItems.find((i) => i.id === watchedItemId);
+  const watchedProfileId = form.watch("pricingProfileId");
+  const watchedQty = form.watch("quantityNeeded");
+  const watchedRate = form.watch("unitRateAmount");
+  const watchedDays = form.watch("rateDays");
+  const watchedRateType = form.watch("rateType");
+
+  // Live line-total preview using the resolved curve
+  const previewTiers = resolveLineTiers(
+    watchedProfileId || null,
+    selectedInvItem?.pricingProfileId ?? null
+  );
+  const previewTotal = computeLineTotal(
+    Number(watchedRate ?? selectedInvItem?.dailyRateAmount ?? 0),
+    Number(watchedDays ?? 1),
+    Number(watchedQty ?? 1),
+    previewTiers,
+    watchedRateType ?? "DAILY"
+  );
 
   useEffect(() => {
     if (!watchedItemId) {
@@ -201,9 +238,12 @@ export function KitListClient({
     });
   }
 
-  const kitTotal = equipmentItems.reduce((sum, item) => {
-    return sum + (item.unitRateAmount ?? 0) * item.rateDays * item.quantityNeeded;
-  }, 0);
+  function lineTotalFor(item: NonNullable<ProjectDetail>["equipmentItems"][number]): number {
+    const tiers = resolveLineTiers(item.pricingProfileId, item.inventoryItem.pricingProfileId);
+    return computeLineTotal(item.unitRateAmount ?? 0, item.rateDays, item.quantityNeeded, tiers, item.rateType);
+  }
+
+  const kitTotal = equipmentItems.reduce((sum, item) => sum + lineTotalFor(item), 0);
 
   return (
     <div>
@@ -238,7 +278,7 @@ export function KitListClient({
               </TableRow>
             )}
             {equipmentItems.map((item) => {
-              const lineTotal = (item.unitRateAmount ?? 0) * item.rateDays * item.quantityNeeded;
+              const lineTotal = lineTotalFor(item);
               return (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium text-sm">
@@ -442,6 +482,42 @@ export function KitListClient({
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="pricingProfileId"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Pricing curve</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Inherit from item / default" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Inherit from item / default</SelectItem>
+                          {pricingProfiles.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}{p.isDefault ? " (default)" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Live curve-based total preview */}
+              <div className="flex items-center justify-between rounded-md bg-slate-50 border px-3 py-2 text-sm">
+                <span className="text-muted-foreground">
+                  Line total
+                  {watchedRateType !== "FLAT" && previewTiers ? " (curve applied)" : ""}
+                </span>
+                <span className="font-semibold tabular-nums">
+                  {formatCents(previewTotal, projectCurrency)}
+                </span>
               </div>
 
               <DialogFooter>

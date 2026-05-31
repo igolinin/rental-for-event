@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { computeLineTotal, resolveTiers } from "@/lib/pricing";
+import { toTiersLite, getDefaultProfile } from "@/server/queries/pricing";
 
 export interface GetInvoicesParams {
   projectId?: string;
@@ -39,3 +41,63 @@ export async function getInvoiceById(id: string) {
 }
 
 export type InvoiceDetail = Awaited<ReturnType<typeof getInvoiceById>>;
+
+/**
+ * Build proposed invoice line items from a project's kit list, using the
+ * curve-resolved total for each piece of equipment. Used to pre-fill the
+ * invoice form when generating an invoice from a project.
+ */
+export async function buildInvoiceLinesFromProject(projectId: string) {
+  const [project, defaultProfile] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        client: { select: { id: true } },
+        equipmentItems: {
+          include: {
+            inventoryItem: {
+              include: { pricingProfile: { include: { tiers: { orderBy: { minDays: "asc" } } } } },
+            },
+            pricingProfile: { include: { tiers: { orderBy: { minDays: "asc" } } } },
+          },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+    }),
+    getDefaultProfile(),
+  ]);
+
+  if (!project) return null;
+  const defaultTiers = toTiersLite(defaultProfile?.tiers);
+
+  const lineItems = project.equipmentItems.map((item, idx) => {
+    const tiers = resolveTiers(
+      toTiersLite(item.pricingProfile?.tiers),
+      toTiersLite(item.inventoryItem.pricingProfile?.tiers),
+      defaultTiers
+    );
+    const total = computeLineTotal(
+      item.unitRateAmount ?? 0,
+      item.rateDays,
+      item.quantityNeeded,
+      tiers,
+      item.rateType
+    );
+    return {
+      description:
+        item.description ||
+        `${item.inventoryItem.name} — ${item.rateDays} day(s)`,
+      quantity: item.quantityNeeded,
+      // unitAmount is per-unit so the form's quantity × unitAmount reproduces the total
+      unitAmount: item.quantityNeeded > 0 ? Math.round(total / item.quantityNeeded) : total,
+      sortOrder: idx,
+    };
+  });
+
+  return {
+    projectId: project.id,
+    clientId: project.clientId,
+    currencyCode: project.currencyCode,
+    lineItems,
+  };
+}

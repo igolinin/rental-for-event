@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { getProjectById } from "@/server/queries/projects";
+import { buildInvoiceLinesFromProject } from "@/server/queries/invoices";
 
 export const metadata: Metadata = { title: "New invoice" };
 
@@ -20,19 +21,20 @@ export default async function NewInvoicePage({ searchParams }: PageProps) {
   let resolvedClientId: string | undefined;
 
   if (projectId) {
-    const project = await getProjectById(projectId);
-    if (project) {
+    const [project, built] = await Promise.all([
+      getProjectById(projectId),
+      buildInvoiceLinesFromProject(projectId),
+    ]);
+    if (project && built) {
       resolvedClientId = project.clientId;
       defaultValues = {
         projectId,
         clientId: project.clientId,
+        currencyCode: built.currencyCode,
         notes: `Invoice for project: ${project.name}`,
-        lineItems: project.equipmentItems.map((item, idx) => ({
-          description: item.inventoryItem.name,
-          quantity: item.quantityNeeded * item.rateDays,
-          unitAmount: item.unitRateAmount ?? 0,
-          sortOrder: idx,
-        })),
+        lineItems: built.lineItems.length
+          ? built.lineItems
+          : [{ description: "", quantity: 1, unitAmount: 0, sortOrder: 0 }],
       };
     }
   }

@@ -629,6 +629,22 @@ New API route `POST /api/ai/fill-item`:
 
 ---
 
+## Phase 17 — Duration-Based Pricing Curves ✅ COMPLETE
+
+**Goal:** Longer rentals get a lower effective per-day/per-week price via reusable rate cards.
+
+- [x] `PricingProfile` + `PricingTier` models (minDays → multiplier); nullable FKs on `InventoryItem` and `ProjectEquipmentItem`. Migration `add_pricing_profiles`.
+- [x] Seeded built-in **Standard** profile (1→1.0, 2→1.8, 3→2.5, 7→3.0, 14→5.0, 30→9.0), `isDefault`+`isSystem`.
+- [x] `src/lib/pricing.ts`: `curveMultiplier` (step-down), `computeLineTotal` (FLAT bypass, linear fallback for no profile), `resolveTiers` (line → item → default), `effectivePerDay`.
+- [x] `/dashboard/pricing` management page (INVENTORY_PRICING:MANAGE) with tier editor + live effective-per-day preview; set default; guarded delete; sidebar "Pricing" link.
+- [x] Pricing-profile select on inventory item form and on project kit-list add/edit dialog, with **live curve-based line-total preview**.
+- [x] `computeProjectPnL` and kit-list totals use the curve; backward compatible (no profile = legacy linear math).
+- [x] Invoice generation from a project (`buildInvoiceLinesFromProject`) pre-fills line items with curve totals; still editable.
+- [x] All pricing actions permission-gated + audit-logged (ties into Phase 16).
+- [x] Tests: `src/lib/__tests__/pricing.test.ts` (curve lookup, FLAT/linear, monotonicity at breakpoints, resolveTiers) + pricing schema validation cases. 191 tests total.
+
+---
+
 ## Backlog / Future Consideration
 
 | Item | Notes |
@@ -657,7 +673,7 @@ New API route `POST /api/ai/fill-item`:
 | 5 | Invoicing + PDF | ✅ Complete |
 | 6 | Reporting + Dashboard | ✅ Complete (PDF export added in Phase 11) |
 | 7 | Polish + Error Handling | ✅ Complete (neverthrow + validation in Phase 10) |
-| 8 | Test Infrastructure | ✅ Complete (now 166 tests across 8 files) |
+| 8 | Test Infrastructure | ✅ Complete (now 191 tests across 9 files) |
 | 9 | UX Completions | ✅ Complete |
 | 10 | Robustness | ✅ Complete |
 | 11 | PDF Reports | ✅ Complete |
@@ -666,3 +682,4 @@ New API route `POST /api/ai/fill-item`:
 | **14** | **CSV Import / Export** | **✅ Complete** (inventory + crew) |
 | **15** | **LLM-Powered Item Details** | **✅ Complete** (Claude / OpenAI / DeepSeek) |
 | **16** | **Governance & Audit Trail** | **✅ Complete** |
+| **17** | **Duration-Based Pricing Curves** | **✅ Complete** (rate cards, profiles, invoice prefill) |

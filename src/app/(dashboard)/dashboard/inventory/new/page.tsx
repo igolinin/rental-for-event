@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ItemForm } from "@/components/inventory/item-form";
 import { getCategories } from "@/server/queries/inventory";
+import { getProfilesForSelect } from "@/server/queries/pricing";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "Add inventory item" };
@@ -15,9 +16,10 @@ const AI_PROVIDER_LABELS: Record<string, string> = {
 };
 
 export default async function NewInventoryItemPage() {
-  const [categories, settings] = await Promise.all([
+  const [categories, settings, pricingProfiles] = await Promise.all([
     getCategories(),
     prisma.systemSettings.findUnique({ where: { id: "singleton" }, select: { aiProvider: true, aiApiKey: true } }),
+    getProfilesForSelect(),
   ]);
   const aiProviderLabel =
     settings?.aiProvider && settings.aiApiKey
@@ -37,7 +39,7 @@ export default async function NewInventoryItemPage() {
       </div>
 
       <div className="max-w-2xl">
-        <ItemForm categories={categories} aiProviderLabel={aiProviderLabel} />
+        <ItemForm categories={categories} aiProviderLabel={aiProviderLabel} pricingProfiles={pricingProfiles} />
       </div>
     </div>
   );

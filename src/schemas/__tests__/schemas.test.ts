@@ -4,6 +4,7 @@ import { timesheetSchema, crewRateSchema } from "@/schemas/crew";
 import { inventoryItemSchema, inventoryItemSchemaRefined } from "@/schemas/inventory";
 import { clientSchema } from "@/schemas/clients";
 import { invoiceSchema, paymentSchema } from "@/schemas/invoices";
+import { pricingProfileSchema } from "@/schemas/pricing";
 
 const BASE_PROJECT = {
   name: "Test Event",
@@ -318,5 +319,54 @@ describe("paymentSchema", () => {
 
   it("rejects invalid payment method", () => {
     expect(paymentSchema.safeParse({ ...BASE_PAYMENT, method: "CRYPTO" }).success).toBe(false);
+  });
+});
+
+describe("pricingProfileSchema", () => {
+  const BASE = {
+    name: "Standard",
+    tiers: [
+      { minDays: 1, multiplier: 1.0 },
+      { minDays: 7, multiplier: 3.0 },
+    ],
+  };
+
+  it("valid profile passes", () => {
+    expect(pricingProfileSchema.safeParse(BASE).success).toBe(true);
+  });
+
+  it("rejects a profile without a day-1 tier", () => {
+    const result = pricingProfileSchema.safeParse({
+      ...BASE,
+      tiers: [{ minDays: 3, multiplier: 2.5 }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects duplicate day breakpoints", () => {
+    const result = pricingProfileSchema.safeParse({
+      ...BASE,
+      tiers: [
+        { minDays: 1, multiplier: 1.0 },
+        { minDays: 1, multiplier: 2.0 },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-positive multiplier", () => {
+    const result = pricingProfileSchema.safeParse({
+      ...BASE,
+      tiers: [{ minDays: 1, multiplier: 0 }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects empty tiers", () => {
+    expect(pricingProfileSchema.safeParse({ ...BASE, tiers: [] }).success).toBe(false);
+  });
+
+  it("rejects missing name", () => {
+    expect(pricingProfileSchema.safeParse({ ...BASE, name: "" }).success).toBe(false);
   });
 });

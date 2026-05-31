@@ -18,6 +18,7 @@ import {
   UserCog,
   Warehouse,
   Shield,
+  Percent,
 } from "lucide-react";
 
 const navItems = [
@@ -40,6 +41,11 @@ const navItems = [
     label: "Warehouses",
     href: "/dashboard/warehouses",
     icon: Warehouse,
+  },
+  {
+    label: "Pricing",
+    href: "/dashboard/pricing",
+    icon: Percent,
   },
   {
     label: "Maintenance",

@@ -28,6 +28,7 @@ export const inventoryItemSchema = z.object({
   dailyRateCurrency: z.string().length(3).default("USD"),
   replacementCostAmount: z.coerce.number().int().min(0).optional().nullable(),
   replacementCostCurrency: z.string().length(3).default("USD"),
+  pricingProfileId: z.string().optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   isActive: z.boolean().default(true),
 });

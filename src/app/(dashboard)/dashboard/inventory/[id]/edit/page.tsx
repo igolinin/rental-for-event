@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ItemForm } from "@/components/inventory/item-form";
 import { getItemById, getCategories } from "@/server/queries/inventory";
+import { getProfilesForSelect } from "@/server/queries/pricing";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -18,7 +19,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function EditInventoryItemPage({ params }: PageProps) {
   const { id } = await params;
-  const [item, categories] = await Promise.all([getItemById(id), getCategories()]);
+  const [item, categories, pricingProfiles] = await Promise.all([
+    getItemById(id),
+    getCategories(),
+    getProfilesForSelect(),
+  ]);
 
   if (!item) notFound();
 
@@ -38,6 +43,7 @@ export default async function EditInventoryItemPage({ params }: PageProps) {
         <ItemForm
           categories={categories}
           itemId={id}
+          pricingProfiles={pricingProfiles}
           defaultValues={{
             name: item.name,
             description: item.description ?? "",
@@ -49,6 +55,7 @@ export default async function EditInventoryItemPage({ params }: PageProps) {
             dailyRateCurrency: item.dailyRateCurrency,
             replacementCostAmount: item.replacementCostAmount ?? undefined,
             replacementCostCurrency: item.replacementCostCurrency,
+            pricingProfileId: item.pricingProfileId ?? "",
             notes: item.notes ?? "",
             isActive: item.isActive,
           }}
