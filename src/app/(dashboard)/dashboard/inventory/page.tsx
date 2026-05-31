@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getItems, getCategories } from "@/server/queries/inventory";
+import { CsvImportExport } from "@/components/shared/csv-import-export";
 
 export const metadata: Metadata = { title: "Inventory" };
 
@@ -69,6 +70,12 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           <p className="text-sm text-slate-500 mt-0.5">{items.length} items</p>
         </div>
         <div className="flex gap-2">
+          <CsvImportExport
+            exportUrl="/api/export/inventory"
+            importUrl="/api/import/inventory"
+            entityLabel="inventory"
+            templateHeaders="refCode,name,description,category,subCategory,trackingMode,totalQuantity,dailyRateAmount,dailyRateCurrency,replacementCostAmount,replacementCostCurrency,notes,isActive"
+          />
           <Button variant="outline" size="sm" asChild>
             <Link href="/dashboard/inventory/categories">
               <Tag className="h-4 w-4 mr-1" />

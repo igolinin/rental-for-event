@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getCrewMembers } from "@/server/queries/crew";
+import { CsvImportExport } from "@/components/shared/csv-import-export";
 
 export const metadata: Metadata = { title: "Crew" };
 
@@ -33,12 +34,20 @@ export default async function CrewPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-bold text-slate-900">Crew</h1>
           <p className="text-sm text-slate-500 mt-0.5">{crew.length} members</p>
         </div>
-        <Button size="sm" asChild>
-          <Link href="/dashboard/crew/new">
-            <Plus className="h-4 w-4 mr-1" />
-            Add crew member
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <CsvImportExport
+            exportUrl="/api/export/crew"
+            importUrl="/api/import/crew"
+            entityLabel="crew"
+            templateHeaders="refCode,firstName,lastName,email,phone,type,role,isActive,taxId,emergencyContact,notes"
+          />
+          <Button size="sm" asChild>
+            <Link href="/dashboard/crew/new">
+              <Plus className="h-4 w-4 mr-1" />
+              Add crew member
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <form method="GET" className="flex flex-wrap gap-3 mb-4">

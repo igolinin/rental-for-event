@@ -492,7 +492,7 @@ Add `properties InventoryItemProperty[]` and `imageList InventoryItemImage[]` to
 
 ---
 
-## Phase 14 — CSV Import / Export
+## Phase 14 — CSV Import / Export ✅ COMPLETE
 
 **Goal:** Bulk import and export inventory items and crew roster via CSV or Excel spreadsheet.
 
@@ -663,6 +663,6 @@ New API route `POST /api/ai/fill-item`:
 | 11 | PDF Reports | ✅ Complete |
 | **12** | **Project Operations** | **✅ Complete** (phases, crew, labor, availability, warehouses) |
 | **13** | **Inventory Enrichment** | **✅ Complete** (photos + dynamic properties) |
-| **14** | **CSV Import / Export** | **❌ Not started** (inventory + crew) |
+| **14** | **CSV Import / Export** | **✅ Complete** (inventory + crew) |
 | **15** | **LLM-Powered Item Details** | **❌ Not started** (Claude / OpenAI / DeepSeek) |
 | **16** | **Governance & Audit Trail** | **✅ Complete** |
