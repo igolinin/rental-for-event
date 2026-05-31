@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getItemById, getPropertyDefs } from "@/server/queries/inventory";
 import { getWarehouseForSelect } from "@/server/queries/warehouses";
+import { getEntityHistory } from "@/server/queries/audit";
 import { ItemDetailClient } from "@/components/inventory/item-detail-client";
 
 interface PageProps {
@@ -16,13 +17,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function InventoryItemPage({ params }: PageProps) {
   const { id } = await params;
-  const [item, warehouses, allPropertyDefs] = await Promise.all([
+  const [item, warehouses, allPropertyDefs, history] = await Promise.all([
     getItemById(id),
     getWarehouseForSelect(),
     getPropertyDefs(),
+    getEntityHistory("InventoryItem", id),
   ]);
 
   if (!item) notFound();
 
-  return <ItemDetailClient item={item} warehouses={warehouses} allPropertyDefs={allPropertyDefs} />;
+  return <ItemDetailClient item={item} warehouses={warehouses} allPropertyDefs={allPropertyDefs} history={history} />;
 }

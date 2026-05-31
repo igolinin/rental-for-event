@@ -3,9 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { projectPhaseSchema } from "@/schemas/phases";
 
 export async function createProjectPhase(projectId: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "PROJECTS", "UPDATE");
+  if (denied) return denied;
+
   const parsed = projectPhaseSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 

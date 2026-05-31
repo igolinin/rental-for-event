@@ -19,9 +19,9 @@ import { ExpensesClient } from "@/components/projects/expenses-client";
 import { PhasesClient } from "@/components/projects/phases-client";
 import { CrewClient } from "@/components/projects/crew-client";
 import { LaborClient } from "@/components/projects/labor-client";
-import { updateProjectStatus, deleteProject } from "@/server/actions/projects";
+import { updateProjectStatus } from "@/server/actions/projects";
 import { toast } from "@/hooks/use-toast";
-import { ChevronLeft, Pencil, ChevronDown, Trash2 } from "lucide-react";
+import { ChevronLeft, Pencil, ChevronDown } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,16 +39,17 @@ import type { CrewForSelectEntry } from "@/server/queries/crew";
 import { formatDate } from "@/lib/utils";
 
 const projectStatusBadge: Record<string, { label: string; className: string }> = {
-  INQUIRY: { label: "Inquiry", className: "bg-slate-100 text-slate-600 border-slate-200" },
-  QUOTED: { label: "Quoted", className: "bg-blue-50 text-blue-700 border-blue-200" },
-  CONFIRMED: { label: "Confirmed", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  INQUIRY:     { label: "Inquiry",     className: "bg-slate-100 text-slate-600 border-slate-200" },
+  QUOTED:      { label: "Quoted",      className: "bg-blue-50 text-blue-700 border-blue-200" },
+  CONFIRMED:   { label: "Confirmed",   className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   IN_PROGRESS: { label: "In progress", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  COMPLETED: { label: "Completed", className: "bg-green-50 text-green-700 border-green-200" },
-  CANCELLED: { label: "Cancelled", className: "bg-red-50 text-red-600 border-red-200" },
+  COMPLETED:   { label: "Completed",   className: "bg-green-50 text-green-700 border-green-200" },
+  CANCELLED:   { label: "Cancelled",   className: "bg-red-50 text-red-600 border-red-200" },
+  ARCHIVED:    { label: "Archived",    className: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
 const STATUS_FLOW = [
-  "INQUIRY", "QUOTED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED",
+  "INQUIRY", "QUOTED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "ARCHIVED",
 ] as const;
 
 function formatCents(cents: number, currency = "USD"): string {
@@ -140,45 +141,7 @@ export function ProjectDetailClient({
             </Link>
           </Button>
 
-          {project.status === "INQUIRY" && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive border-destructive/30 hover:bg-destructive/5"
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Delete
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete project?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This permanently deletes &quot;{project.name}&quot; and all kit list items. This cannot be undone. Only Inquiry-status projects can be deleted.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive hover:bg-destructive/90"
-                    onClick={async () => {
-                      const result = await deleteProject(project.id);
-                      if (result.error) {
-                        toast({ variant: "destructive", title: result.error });
-                      } else {
-                        toast({ title: "Project deleted" });
-                        router.push("/dashboard/projects");
-                      }
-                    }}
-                  >
-                    Delete project
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
+          {/* Projects are never hard-deleted. Use status → CANCELLED to retire an Inquiry project. */}
         </div>
       </div>
 

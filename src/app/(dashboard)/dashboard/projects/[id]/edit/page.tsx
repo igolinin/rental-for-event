@@ -49,7 +49,7 @@ export default async function EditProjectPage({ params }: PageProps) {
           defaultValues={{
             name: project.name,
             type: project.type,
-            status: project.status,
+            status: project.status === "ARCHIVED" ? "COMPLETED" : (project.status as "INQUIRY" | "QUOTED" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"),
             clientId: project.clientId,
             venue: project.venue ?? "",
             city: project.city ?? "",

@@ -21,9 +21,12 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  projectsCreated   Project[]        @relation("ProjectCreatedBy")
-  invoicesCreated   Invoice[]        @relation("InvoiceCreatedBy")
-  maintenanceLogged MaintenanceLog[] @relation("MaintenanceLoggedBy")
+  projectsCreated    Project[]        @relation("ProjectCreatedBy")
+  invoicesCreated    Invoice[]        @relation("InvoiceCreatedBy")
+  maintenanceLogged  MaintenanceLog[] @relation("MaintenanceLoggedBy")
+  permissions        UserPermission[] @relation("UserPermissions")
+  permissionsGranted UserPermission[] @relation("GrantedPermissions")
+  auditLogs          AuditLog[]
 }
 
 enum UserRole {
@@ -31,6 +34,80 @@ enum UserRole {
   MANAGER
   STAFF
   VIEWER
+}
+
+// ─── Permissions ──────────────────────────────────────────────────────────────
+
+enum PermissionResource {
+  INVENTORY
+  INVENTORY_PRICING
+  WAREHOUSES
+  PROJECTS
+  CREW
+  TIMESHEETS
+  INVOICES
+  CLIENTS
+  REPORTS
+  SETTINGS
+  AUDIT
+}
+
+enum PermissionAction {
+  READ
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  MANAGE
+}
+
+model UserPermission {
+  id          String             @id @default(cuid())
+  userId      String
+  resource    PermissionResource
+  action      PermissionAction
+  resourceId  String?
+  granted     Boolean            @default(true)
+  grantedById String?
+  createdAt   DateTime           @default(now())
+
+  user      User  @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("GrantedPermissions", fields: [grantedById], references: [id])
+
+  @@unique([userId, resource, action, resourceId])
+  @@index([userId])
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  ALLOCATION
+  APPROVAL
+  REJECTION
+  PERMISSION_CHANGE
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  entityType  String
+  entityId    String
+  entityLabel String?
+  action      AuditAction
+  userId      String?
+  changes     Json?
+  meta        Json?
+  createdAt   DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
 }
 
 // ============================================================
@@ -302,6 +379,7 @@ enum ProjectStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  ARCHIVED
 }
 
 model ProjectEquipmentItem {

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { z } from "zod";
 
 const settingsSchema = z.object({
@@ -21,6 +23,10 @@ const settingsSchema = z.object({
 export type SettingsFormValues = z.infer<typeof settingsSchema>;
 
 export async function upsertSettings(data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "SETTINGS", "MANAGE");
+  if (denied) return denied;
+
   const parsed = settingsSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 

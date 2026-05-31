@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 
 const createUserSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
@@ -73,4 +74,57 @@ export async function resetUserPassword(id: string, newPassword: string) {
   if (result.isErr()) return { error: result.error };
   revalidatePath("/dashboard/users");
   return { success: true };
+}
+
+// ─── Permission management ────────────────────────────────────────────────────
+
+const grantPermissionSchema = z.object({
+  resource: z.enum(["INVENTORY","INVENTORY_PRICING","WAREHOUSES","PROJECTS","CREW","TIMESHEETS","INVOICES","CLIENTS","REPORTS","SETTINGS","AUDIT"]),
+  action: z.enum(["READ","CREATE","UPDATE","DELETE","APPROVE","MANAGE"]),
+  resourceId: z.string().optional().nullable(),
+  granted: z.boolean().default(true),
+});
+
+export async function grantPermission(targetUserId: string, data: unknown) {
+  const check = await requireAdmin();
+  if ("error" in check) return check;
+
+  const parsed = grantPermissionSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const { resource, action, resourceId, granted } = parsed.data;
+
+  // Find existing permission for this exact combination
+  const existing = await prisma.userPermission.findFirst({
+    where: { userId: targetUserId, resource, action, resourceId: resourceId || null },
+  });
+  const result = existing
+    ? await safeDb(prisma.userPermission.update({ where: { id: existing.id }, data: { granted, grantedById: check.session.user.id } }))
+    : await safeDb(prisma.userPermission.create({ data: { userId: targetUserId, resource, action, resourceId: resourceId || null, granted, grantedById: check.session.user.id } }));
+  if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "User", entityId: targetUserId, action: "PERMISSION_CHANGE", userId: check.session.user.id, meta: { resource, action, resourceId, granted } });
+  revalidatePath("/dashboard/users");
+  return { success: true, id: result.value.id };
+}
+
+export async function revokePermission(permissionId: string) {
+  const check = await requireAdmin();
+  if ("error" in check) return check;
+
+  const result = await safeDb(prisma.userPermission.delete({ where: { id: permissionId } }));
+  if (result.isErr()) return { error: result.error };
+  revalidatePath("/dashboard/users");
+  return { success: true };
+}
+
+export async function getUserPermissions(userId: string) {
+  const check = await requireAdmin();
+  if ("error" in check) return { permissions: [] };
+  return {
+    permissions: await prisma.userPermission.findMany({
+      where: { userId },
+      include: { grantedBy: { select: { name: true } } },
+      orderBy: [{ resource: "asc" }, { action: "asc" }],
+    }),
+  };
 }

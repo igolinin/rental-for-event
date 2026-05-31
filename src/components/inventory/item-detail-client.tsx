@@ -35,6 +35,7 @@ import { UnitFormDialog } from "@/components/inventory/unit-form";
 import { MaintenanceLogFormDialog } from "@/components/inventory/maintenance-log-form";
 import { ItemImagesClient } from "@/components/inventory/item-images-client";
 import { ItemPropertiesClient } from "@/components/inventory/item-properties-client";
+import { AuditTimeline } from "@/components/audit/audit-timeline";
 import {
   deleteSerializedUnit,
   updateMaintenanceLogStatus,
@@ -56,6 +57,7 @@ interface ItemDetailClientProps {
   item: NonNullable<ItemDetail>;
   warehouses?: { id: string; name: string; city: string | null }[];
   allPropertyDefs?: import("@/server/queries/inventory").PropertyDefEntry[];
+  history?: import("@/server/queries/audit").EntityHistoryEntry[];
 }
 
 const unitStatusBadge: Record<string, { label: string; className: string }> = {
@@ -81,7 +83,7 @@ function formatCents(cents: number | null | undefined, currency = "USD"): string
   }).format(cents / 100);
 }
 
-export function ItemDetailClient({ item, warehouses = [], allPropertyDefs = [] }: ItemDetailClientProps) {
+export function ItemDetailClient({ item, warehouses = [], allPropertyDefs = [], history = [] }: ItemDetailClientProps) {
   const router = useRouter();
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false);
@@ -239,6 +241,9 @@ export function ItemDetailClient({ item, warehouses = [], allPropertyDefs = [] }
           <TabsTrigger value="maintenance">
             Maintenance ({item.maintenanceLogs.length})
           </TabsTrigger>
+          <TabsTrigger value="history">
+            History ({history.length})
+          </TabsTrigger>
         </TabsList>
 
         {/* Overview */}
@@ -372,6 +377,13 @@ export function ItemDetailClient({ item, warehouses = [], allPropertyDefs = [] }
             properties={item.properties}
             allPropertyDefs={allPropertyDefs}
           />
+        </TabsContent>
+
+        {/* History */}
+        <TabsContent value="history" className="mt-4">
+          <div className="rounded-lg border bg-white p-6">
+            <AuditTimeline entries={history} emptyText="No changes recorded yet. Edits will appear here." />
+          </div>
         </TabsContent>
 
         {/* Maintenance */}

@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
 import { generateRefCode } from "@/lib/utils";
 import { auth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { invoiceSchema, invoiceUpdateSchema, paymentSchema } from "@/schemas/invoices";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,7 +36,8 @@ function computeTotals(
 
 export async function createInvoice(data: unknown) {
   const session = await auth();
-  if (!session?.user) return { error: "Not authenticated." };
+  const denied = await requirePermission(session, "INVOICES", "CREATE");
+  if (denied) return denied;
 
   const parsed = invoiceSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
@@ -59,7 +62,7 @@ export async function createInvoice(data: unknown) {
         totalAmount: total,
         notes: d.notes || null,
         terms: d.terms || null,
-        createdById: session.user.id,
+        createdById: session!.user!.id,
         lineItems: {
           create: d.lineItems.map((li, idx) => ({
             description: li.description,
@@ -75,12 +78,17 @@ export async function createInvoice(data: unknown) {
   );
 
   if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Invoice", entityId: result.value.id, entityLabel: result.value.refCode, action: "CREATE", userId: session?.user?.id, meta: { projectId: d.projectId } });
   revalidatePath("/dashboard/invoices");
   revalidatePath(`/dashboard/projects/${d.projectId}`);
   return { success: true, id: result.value.id };
 }
 
 export async function updateInvoice(id: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "INVOICES", "UPDATE");
+  if (denied) return denied;
+
   const parsed = invoiceUpdateSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -128,6 +136,9 @@ export async function updateInvoiceStatus(
   id: string,
   status: "DRAFT" | "SENT" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "VOID"
 ) {
+  const session = await auth();
+  const denied = await requirePermission(session, "INVOICES", "UPDATE");
+  if (denied) return denied;
   const invoiceResult = await safeDb(
     prisma.invoice.findUnique({ where: { id }, select: { projectId: true } })
   );
@@ -138,7 +149,7 @@ export async function updateInvoiceStatus(
     prisma.invoice.update({ where: { id }, data: { status } })
   );
   if (result.isErr()) return { error: result.error };
-
+  await logAudit({ entityType: "Invoice", entityId: id, action: "STATUS_CHANGE", userId: session?.user?.id, changes: { status: { from: null, to: status } } });
   revalidatePath("/dashboard/invoices");
   revalidatePath(`/dashboard/invoices/${id}`);
   revalidatePath(`/dashboard/projects/${invoiceResult.value.projectId}`);

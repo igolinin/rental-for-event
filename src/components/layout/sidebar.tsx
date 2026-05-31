@@ -17,6 +17,7 @@ import {
   Building2,
   UserCog,
   Warehouse,
+  Shield,
 } from "lucide-react";
 
 const navItems = [
@@ -79,6 +80,11 @@ const navItems = [
     label: "Team",
     href: "/dashboard/users",
     icon: UserCog,
+  },
+  {
+    label: "Audit Log",
+    href: "/dashboard/audit",
+    icon: Shield,
   },
   {
     label: "Settings",

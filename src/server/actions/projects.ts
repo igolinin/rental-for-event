@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
 import { generateRefCode } from "@/lib/utils";
 import { auth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { getAvailableQuantity } from "@/lib/availability";
 import {
   projectSchema,
@@ -18,7 +20,8 @@ import {
 
 export async function createProject(data: unknown) {
   const session = await auth();
-  if (!session?.user) return { error: "Not authenticated." };
+  const denied = await requirePermission(session, "PROJECTS", "CREATE");
+  if (denied) return denied;
 
   const parsed = projectSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
@@ -44,16 +47,21 @@ export async function createProject(data: unknown) {
         depositAmount: d.depositAmount,
         notes: d.notes,
         internalNotes: d.internalNotes,
-        createdById: session.user.id,
+        createdById: session!.user!.id,
       },
     })
   );
   if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Project", entityId: result.value.id, entityLabel: d.name, action: "CREATE", userId: session?.user?.id });
   revalidatePath("/dashboard/projects");
   return { success: true, id: result.value.id };
 }
 
 export async function updateProject(id: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "PROJECTS", "UPDATE");
+  if (denied) return denied;
+
   const parsed = projectSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -82,41 +90,60 @@ export async function updateProject(id: string, data: unknown) {
     })
   );
   if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Project", entityId: id, action: "UPDATE", userId: session?.user?.id });
   revalidatePath("/dashboard/projects");
   revalidatePath(`/dashboard/projects/${id}`);
   return { success: true };
 }
 
-export async function deleteProject(id: string) {
-  const projectResult = await safeDb(
-    prisma.project.findUnique({
-      where: { id },
-      select: { status: true, _count: { select: { invoices: true } } },
-    })
-  );
-  if (projectResult.isErr()) return { error: projectResult.error };
-  if (!projectResult.value) return { error: "Project not found." };
-  if (projectResult.value.status !== "INQUIRY") {
-    return { error: "Only projects in Inquiry status can be deleted." };
-  }
-  if (projectResult.value._count.invoices > 0) {
-    return { error: "Cannot delete: project has invoices. Void them first." };
+// Projects are never hard-deleted. Use updateProjectStatus to CANCELLED/ARCHIVED instead.
+
+// ─── Status transition machine ────────────────────────────────────────────────
+
+type ProjectStatus = "INQUIRY" | "QUOTED" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "ARCHIVED";
+
+const ALLOWED_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
+  INQUIRY:     ["QUOTED", "CANCELLED"],
+  QUOTED:      ["CONFIRMED", "INQUIRY", "CANCELLED"],
+  CONFIRMED:   ["IN_PROGRESS", "QUOTED", "CANCELLED"],
+  IN_PROGRESS: ["COMPLETED", "CONFIRMED"],
+  COMPLETED:   ["ARCHIVED"],
+  CANCELLED:   [],
+  ARCHIVED:    [],
+};
+
+export async function updateProjectStatus(id: string, status: ProjectStatus) {
+  const session = await auth();
+  const denied = await requirePermission(session, "PROJECTS", "UPDATE");
+  if (denied) return denied;
+
+  const project = await prisma.project.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      name: true,
+      _count: { select: { invoices: true } },
+      invoices: { where: { status: { notIn: ["DRAFT", "VOID"] } }, select: { id: true } },
+    },
+  });
+  if (!project) return { error: "Project not found." };
+
+  const from = project.status as ProjectStatus;
+  const allowed = ALLOWED_TRANSITIONS[from] ?? [];
+
+  // Only ADMIN can use transitions not in the default list (reverting, etc.)
+  if (!allowed.includes(status) && session?.user?.role !== "ADMIN") {
+    return { error: `Cannot transition from ${from} to ${status}.` };
   }
 
-  const result = await safeDb(prisma.project.delete({ where: { id } }));
-  if (result.isErr()) return { error: result.error };
-  revalidatePath("/dashboard/projects");
-  return { success: true };
-}
+  // Cancelling a project with active invoices requires ADMIN
+  if (status === "CANCELLED" && project.invoices.length > 0 && session?.user?.role !== "ADMIN") {
+    return { error: "Cannot cancel a project with active invoices. An admin must approve this." };
+  }
 
-export async function updateProjectStatus(
-  id: string,
-  status: "INQUIRY" | "QUOTED" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
-) {
-  const result = await safeDb(
-    prisma.project.update({ where: { id }, data: { status } })
-  );
+  const result = await safeDb(prisma.project.update({ where: { id }, data: { status } }));
   if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Project", entityId: id, entityLabel: project.name, action: "STATUS_CHANGE", userId: session?.user?.id, changes: { status: { from, to: status } } });
   revalidatePath("/dashboard/projects");
   revalidatePath(`/dashboard/projects/${id}`);
   return { success: true };
@@ -148,13 +175,17 @@ export async function checkItemAvailability(
 // ─── Kit List (Equipment Items) ───────────────────────────────────────────────
 
 export async function addEquipmentItem(projectId: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "PROJECTS", "UPDATE");
+  if (denied) return denied;
+
   const parsed = equipmentItemSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
   const d = parsed.data;
 
   const projectResult = await safeDb(
-    prisma.project.findUnique({ where: { id: projectId }, select: { startAt: true, endAt: true } })
+    prisma.project.findUnique({ where: { id: projectId }, select: { startAt: true, endAt: true, name: true } })
   );
   if (projectResult.isErr()) return { error: projectResult.error };
   if (!projectResult.value) return { error: "Project not found." };
@@ -166,6 +197,15 @@ export async function addEquipmentItem(projectId: string, data: unknown) {
     projectId
   );
   if (available < d.quantityNeeded) {
+    // Log the conflict attempt so it's traceable
+    await logAudit({
+      entityType: "InventoryItem",
+      entityId: d.inventoryItemId,
+      action: "ALLOCATION",
+      userId: session?.user?.id,
+      changes: { availability: { from: available, to: "CONFLICT" } },
+      meta: { projectId, projectName: projectResult.value.name, requestedQty: d.quantityNeeded, availableQty: available },
+    });
     return { error: `Only ${available} unit(s) available for that date range.` };
   }
 
@@ -192,6 +232,13 @@ export async function addEquipmentItem(projectId: string, data: unknown) {
     })
   );
   if (result.isErr()) return { error: result.error };
+  await logAudit({
+    entityType: "InventoryItem",
+    entityId: d.inventoryItemId,
+    action: "ALLOCATION",
+    userId: session?.user?.id,
+    meta: { projectId, projectName: projectResult.value.name, quantityNeeded: d.quantityNeeded, kitItemId: result.value.id },
+  });
   revalidatePath(`/dashboard/projects/${projectId}`);
   return { success: true };
 }

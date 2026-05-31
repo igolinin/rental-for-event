@@ -3,9 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { warehouseSchema } from "@/schemas/warehouses";
 
 export async function createWarehouse(data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "WAREHOUSES", "CREATE");
+  if (denied) return denied;
+
   const parsed = warehouseSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -23,11 +30,16 @@ export async function createWarehouse(data: unknown) {
   );
 
   if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Warehouse", entityId: result.value.id, entityLabel: d.name, action: "CREATE", userId: session!.user.id });
   revalidatePath("/dashboard/warehouses");
   return { success: true, id: result.value.id };
 }
 
 export async function updateWarehouse(id: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "WAREHOUSES", "UPDATE");
+  if (denied) return denied;
+
   const parsed = warehouseSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -51,6 +63,9 @@ export async function updateWarehouse(id: string, data: unknown) {
 }
 
 export async function toggleWarehouseActive(id: string, isActive: boolean) {
+  const session = await auth();
+  const denied = await requirePermission(session, "WAREHOUSES", "UPDATE");
+  if (denied) return denied;
   const result = await safeDb(
     prisma.warehouse.update({ where: { id }, data: { isActive } })
   );

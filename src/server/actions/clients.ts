@@ -3,10 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { generateShortCode } from "@/lib/utils";
 import { clientSchema } from "@/schemas/clients";
 
 export async function createClient(data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "CLIENTS", "CREATE");
+  if (denied) return denied;
+
   const parsed = clientSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -32,11 +39,16 @@ export async function createClient(data: unknown) {
   );
 
   if (result.isErr()) return { error: result.error };
+  await logAudit({ entityType: "Client", entityId: result.value.id, entityLabel: d.name, action: "CREATE", userId: session!.user.id });
   revalidatePath("/dashboard/clients");
   return { success: true, id: result.value.id };
 }
 
 export async function updateClient(id: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "CLIENTS", "UPDATE");
+  if (denied) return denied;
+
   const parsed = clientSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -67,6 +79,9 @@ export async function updateClient(id: string, data: unknown) {
 }
 
 export async function deleteClient(id: string) {
+  const session = await auth();
+  const denied = await requirePermission(session, "CLIENTS", "DELETE");
+  if (denied) return denied;
   const countResult = await safeDb(
     prisma.project.count({
       where: { clientId: id, status: { notIn: ["CANCELLED", "COMPLETED"] } },

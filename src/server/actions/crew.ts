@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
 import { generateShortCode } from "@/lib/utils";
 import { auth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import {
   crewMemberSchema,
   crewRateSchema,
@@ -18,6 +20,10 @@ import { getActiveCrewRates } from "@/server/queries/crew";
 // ─── Crew Members ─────────────────────────────────────────────────────────────
 
 export async function createCrewMember(data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "CREW", "CREATE");
+  if (denied) return denied;
+
   const parsed = crewMemberSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -47,6 +53,10 @@ export async function createCrewMember(data: unknown) {
 }
 
 export async function updateCrewMember(id: string, data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "CREW", "UPDATE");
+  if (denied) return denied;
+
   const parsed = crewMemberSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -220,7 +230,8 @@ export async function submitTimesheet(timesheetId: string) {
 
 export async function approveTimesheet(timesheetId: string) {
   const session = await auth();
-  if (!session?.user) return { error: "Not authenticated." };
+  const denied = await requirePermission(session, "TIMESHEETS", "APPROVE");
+  if (denied) return denied;
 
   const tsResult = await safeDb(
     prisma.timesheet.findUnique({
@@ -279,12 +290,13 @@ export async function approveTimesheet(timesheetId: string) {
         overtimeRateAmount: overtimeRate,
         doubleTimeRateAmount: doubleTimeRate,
         totalAmount,
-        approvedById: session.user.id,
+        approvedById: session?.user?.id,
         approvedAt: new Date(),
       },
     })
   );
   if (updateResult.isErr()) return { error: updateResult.error };
+  await logAudit({ entityType: "Timesheet", entityId: timesheetId, action: "APPROVAL", userId: session?.user?.id, meta: { crewMemberId: ts.crewMemberId, totalAmount, projectId: ts.projectId } });
   revalidatePath("/dashboard/timesheets");
   revalidatePath(`/dashboard/projects/${ts.projectId}`);
   return { success: true };

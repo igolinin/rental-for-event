@@ -31,8 +31,8 @@ export function DeleteClientButton({ clientId, clientName }: DeleteClientButtonP
     setIsPending(true);
     try {
       const result = await deleteClient(clientId);
-      if (result.error) {
-        toast({ variant: "destructive", title: result.error });
+      if ("error" in result && result.error) {
+        toast({ variant: "destructive", title: String(result.error) });
         return;
       }
       toast({ title: `${clientName} deleted` });
