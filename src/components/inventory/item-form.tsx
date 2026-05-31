@@ -27,14 +27,17 @@ import { inventoryItemSchema, type InventoryItemFormValues } from "@/schemas/inv
 import { createInventoryItem, updateInventoryItem } from "@/server/actions/inventory";
 import type { CategoryWithSubs } from "@/server/queries/inventory";
 import { toast } from "@/hooks/use-toast";
+import { AiFillDialog } from "@/components/inventory/ai-fill-dialog";
+import type { ItemSuggestion } from "@/lib/ai";
 
 interface ItemFormProps {
   categories: CategoryWithSubs[];
   defaultValues?: Partial<InventoryItemFormValues>;
   itemId?: string;
+  aiProviderLabel?: string | null;
 }
 
-export function ItemForm({ categories, defaultValues, itemId }: ItemFormProps) {
+export function ItemForm({ categories, defaultValues, itemId, aiProviderLabel }: ItemFormProps) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
 
@@ -70,6 +73,28 @@ export function ItemForm({ categories, defaultValues, itemId }: ItemFormProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedCategory]);
 
+  function applyAiSuggestion(s: ItemSuggestion) {
+    if (s.name) form.setValue("name", s.name);
+    if (s.description) form.setValue("description", s.description);
+    if (s.dailyRateHintCents != null) form.setValue("dailyRateAmount", s.dailyRateHintCents);
+    if (s.replacementCostHintCents != null) form.setValue("replacementCostAmount", s.replacementCostHintCents);
+    // Match category by name hint (case-insensitive contains)
+    if (s.categoryHint) {
+      const match = categories.find(
+        (c) => c.name.toLowerCase() === s.categoryHint.toLowerCase() ||
+               c.name.toLowerCase().includes(s.categoryHint.toLowerCase()) ||
+               s.categoryHint.toLowerCase().includes(c.name.toLowerCase())
+      );
+      if (match) form.setValue("categoryId", match.id);
+    }
+    // Append suggested specs to notes so they're not lost (properties UI lives on detail page)
+    if (s.properties.length > 0) {
+      const specLines = s.properties.map((p) => `${p.name}: ${p.value}`).join("\n");
+      const existing = form.getValues("notes");
+      form.setValue("notes", existing ? `${existing}\n\nAI-suggested specs:\n${specLines}` : `AI-suggested specs:\n${specLines}`);
+    }
+  }
+
   async function onSubmit(values: InventoryItemFormValues) {
     setIsPending(true);
     try {
@@ -101,6 +126,15 @@ export function ItemForm({ categories, defaultValues, itemId }: ItemFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {aiProviderLabel && !itemId && (
+          <div className="flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50/50 px-4 py-3">
+            <p className="text-sm text-slate-600">
+              Have a photo? Let AI pre-fill the details for you.
+            </p>
+            <AiFillDialog providerLabel={aiProviderLabel} onFilled={applyAiSuggestion} />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {/* Name */}
           <FormField

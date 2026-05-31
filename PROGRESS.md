@@ -531,7 +531,7 @@ Add `properties InventoryItemProperty[]` and `imageList InventoryItemImage[]` to
 
 ---
 
-## Phase 15 — LLM-Powered Item Details
+## Phase 15 — LLM-Powered Item Details ✅ COMPLETE
 
 **Goal:** Upload a photo or paste a description of a piece of equipment; the app calls an LLM with vision to suggest name, description, category, specs, and estimated replacement cost — pre-populating the item form for user review.
 
@@ -664,5 +664,5 @@ New API route `POST /api/ai/fill-item`:
 | **12** | **Project Operations** | **✅ Complete** (phases, crew, labor, availability, warehouses) |
 | **13** | **Inventory Enrichment** | **✅ Complete** (photos + dynamic properties) |
 | **14** | **CSV Import / Export** | **✅ Complete** (inventory + crew) |
-| **15** | **LLM-Powered Item Details** | **❌ Not started** (Claude / OpenAI / DeepSeek) |
+| **15** | **LLM-Powered Item Details** | **✅ Complete** (Claude / OpenAI / DeepSeek) |
 | **16** | **Governance & Audit Trail** | **✅ Complete** |

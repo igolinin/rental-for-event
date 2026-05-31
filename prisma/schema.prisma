@@ -876,5 +876,11 @@ model SystemSettings {
   invoiceNotes        String?
   otDailyThreshold    Int      @default(8)
   otWeeklyThreshold   Int      @default(40)
+
+  // AI / LLM configuration for item detail inference
+  aiProvider          String?  // "claude" | "openai" | "deepseek"
+  aiApiKey            String?  // stored server-side; never sent to client
+  aiModel             String?  // optional model override
+
   updatedAt           DateTime @updatedAt
 }

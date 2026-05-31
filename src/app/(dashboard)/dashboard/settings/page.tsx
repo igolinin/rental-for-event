@@ -1,16 +1,20 @@
 import { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { PropertyDefsManager } from "@/components/inventory/property-defs-manager";
+import { AiSettings } from "@/components/settings/ai-settings";
 import { getPropertyDefs } from "@/server/queries/inventory";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  const [settings, propertyDefs] = await Promise.all([
+  const [settings, propertyDefs, session] = await Promise.all([
     prisma.systemSettings.findUnique({ where: { id: "singleton" } }),
     getPropertyDefs(),
+    auth(),
   ]);
+  const isAdmin = session?.user?.role === "ADMIN";
 
   return (
     <div className="max-w-2xl">
@@ -52,6 +56,18 @@ export default async function SettingsPage() {
         </div>
         <PropertyDefsManager propertyDefs={propertyDefs} />
       </div>
+
+      {isAdmin && (
+        <div className="mt-8">
+          <AiSettings
+            current={{
+              aiProvider: settings?.aiProvider ?? null,
+              aiModel: settings?.aiModel ?? null,
+              hasApiKey: !!settings?.aiApiKey,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

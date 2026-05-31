@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { safeDb } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
+import { testProvider, type LLMProvider } from "@/lib/ai";
 import { z } from "zod";
 
 const settingsSchema = z.object({
@@ -55,4 +56,51 @@ export async function upsertSettings(data: unknown) {
   if (result.isErr()) return { error: result.error };
   revalidatePath("/dashboard/settings");
   return { success: true };
+}
+
+// ─── AI / LLM configuration ────────────────────────────────────────────────────
+
+const aiSettingsSchema = z.object({
+  aiProvider: z.enum(["claude", "openai", "deepseek"]).optional().nullable().or(z.literal("")),
+  aiApiKey: z.string().optional().nullable(),
+  aiModel: z.string().max(100).optional().nullable(),
+});
+
+export async function upsertAiSettings(data: unknown) {
+  const session = await auth();
+  const denied = await requirePermission(session, "SETTINGS", "MANAGE");
+  if (denied) return denied;
+
+  const parsed = aiSettingsSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const d = parsed.data;
+  const result = await safeDb(
+    prisma.systemSettings.update({
+      where: { id: "singleton" },
+      data: {
+        aiProvider: d.aiProvider || null,
+        // Only overwrite the key if a new non-empty value is supplied
+        ...(d.aiApiKey ? { aiApiKey: d.aiApiKey } : {}),
+        aiModel: d.aiModel || null,
+      },
+    })
+  );
+  if (result.isErr()) return { error: result.error };
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+export async function testAiConnection(provider: string, model?: string) {
+  const session = await auth();
+  const denied = await requirePermission(session, "SETTINGS", "MANAGE");
+  if (denied) return { ok: false, error: "Permission denied" };
+
+  const settings = await prisma.systemSettings.findUnique({
+    where: { id: "singleton" },
+    select: { aiApiKey: true },
+  });
+  if (!settings?.aiApiKey) return { ok: false, error: "Save an API key first." };
+
+  return testProvider(provider as LLMProvider, settings.aiApiKey, model);
 }
